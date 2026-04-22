@@ -143,8 +143,8 @@ export class ProfileManager {
   async openProfile(profileId: string): Promise<BrowserConnection> {
     // Look up the profile in the database
     const row = this.db
-      .prepare('SELECT id, name, browser_type, status, fingerprint_config FROM profiles WHERE id = ?')
-      .get(profileId) as { id: string; name: string; browser_type: string; status: string; fingerprint_config: string | null } | undefined;
+      .prepare('SELECT id, name, browser_type, status, fingerprint_config, proxy_id FROM profiles WHERE id = ?')
+      .get(profileId) as { id: string; name: string; browser_type: string; status: string; fingerprint_config: string | null; proxy_id: string | null } | undefined;
 
     if (!row) {
       const error = new Error(`Profile not found: ${profileId}`);
@@ -162,11 +162,29 @@ export class ProfileManager {
     const profileDir = this.getProfileDir(profileId);
     fs.mkdirSync(profileDir, { recursive: true });
 
+    // Load proxy config if assigned
+    let proxyOption: { server: string; username?: string; password?: string } | undefined;
+    if (row.proxy_id) {
+      const proxyRow = this.db
+        .prepare('SELECT protocol, host, port, username, password FROM proxies WHERE id = ?')
+        .get(row.proxy_id) as { protocol: string; host: string; port: number; username: string | null; password: string | null } | undefined;
+      if (proxyRow) {
+        proxyOption = {
+          server: `${proxyRow.protocol}://${proxyRow.host}:${proxyRow.port}`,
+          username: proxyRow.username || undefined,
+          password: proxyRow.password || undefined,
+        };
+      }
+    }
+
+    // Parse fingerprint config
+    const fpConfig = row.fingerprint_config ? JSON.parse(row.fingerprint_config) : null;
+
     // Select the browser type based on profile configuration
     const browserType = row.browser_type === 'firefox' ? firefox : chromium;
 
-    // Launch persistent browser context with isolated user data dir
-    const context = await browserType.launchPersistentContext(profileDir, {
+    // Build launch options
+    const launchOptions: Record<string, unknown> = {
       headless: false,
       args: row.browser_type === 'firefox'
         ? []
@@ -190,7 +208,63 @@ export class ProfileManager {
         GOOGLE_DEFAULT_CLIENT_ID: 'no',
         GOOGLE_DEFAULT_CLIENT_SECRET: 'no',
       },
-    });
+      // Apply proxy if configured
+      ...(proxyOption ? { proxy: proxyOption } : {}),
+      // Apply User-Agent if configured
+      ...(fpConfig?.userAgent ? { userAgent: fpConfig.userAgent } : {}),
+    };
+
+    // Launch persistent browser context with isolated user data dir
+    const context = await browserType.launchPersistentContext(profileDir, launchOptions);
+
+    // Inject fingerprint spoofing scripts
+    if (fpConfig) {
+      // Hardware spoofing: CPU cores and RAM
+      if (fpConfig.cpu?.cores || fpConfig.ram?.sizeGB) {
+        const cores = fpConfig.cpu?.cores || 4;
+        const ram = fpConfig.ram?.sizeGB || 8;
+        await context.addInitScript(`
+          Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => ${cores} });
+          Object.defineProperty(navigator, 'deviceMemory', { get: () => ${ram} });
+        `);
+      }
+
+      // Platform spoofing
+      if (fpConfig.platform) {
+        await context.addInitScript(`
+          Object.defineProperty(navigator, 'platform', { get: () => ${JSON.stringify(fpConfig.platform)} });
+        `);
+      }
+
+      // WebRTC spoofing
+      if (fpConfig.webrtc === 'disable') {
+        await context.addInitScript(`
+          if (typeof window !== 'undefined') {
+            window.RTCPeerConnection = function() { throw new DOMException('WebRTC disabled', 'NotSupportedError'); };
+            window.RTCPeerConnection.prototype = {};
+            if ('webkitRTCPeerConnection' in window) window.webkitRTCPeerConnection = window.RTCPeerConnection;
+          }
+        `);
+      }
+
+      // Canvas noise
+      if (fpConfig.canvas?.noiseLevel > 0) {
+        await context.addInitScript(`
+          const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+          HTMLCanvasElement.prototype.toDataURL = function() {
+            const ctx = this.getContext('2d');
+            if (ctx) {
+              const img = ctx.getImageData(0, 0, this.width, this.height);
+              for (let i = 0; i < img.data.length; i += 4) {
+                img.data[i] = Math.max(0, Math.min(255, img.data[i] + Math.floor((Math.random() - 0.5) * ${Math.ceil(fpConfig.canvas.noiseLevel * 10)})));
+              }
+              ctx.putImageData(img, 0, 0);
+            }
+            return origToDataURL.apply(this, arguments);
+          };
+        `);
+      }
+    }
 
     // Get the browser's CDP endpoint for external tools
     const browser = context.browser();
@@ -204,6 +278,19 @@ export class ProfileManager {
 
     // Track the browser context for later cleanup
     this.openBrowsers.set(profileId, context);
+
+    // Listen for browser close event (user closes the window)
+    context.on('close', () => {
+      this.openBrowsers.delete(profileId);
+      const now2 = new Date().toISOString();
+      try {
+        this.db
+          .prepare('UPDATE profiles SET status = ?, updated_at = ? WHERE id = ?')
+          .run('closed', now2, profileId);
+      } catch {
+        // DB might be closed during app shutdown
+      }
+    });
 
     return {
       wsEndpoint,
@@ -362,6 +449,47 @@ export class ProfileManager {
       params.push(JSON.stringify(config.fingerprint));
     }
 
+    // Handle proxy assignment: save proxy to proxies table and link to profile
+    if (config.proxy !== undefined) {
+      if (config.proxy) {
+        // Check if profile already has a proxy assigned
+        if (row.proxy_id) {
+          // Update existing proxy record
+          this.db.prepare(
+            `UPDATE proxies SET protocol = ?, host = ?, port = ?, username = ?, password = ? WHERE id = ?`
+          ).run(
+            config.proxy.protocol,
+            config.proxy.host,
+            config.proxy.port,
+            config.proxy.username || null,
+            config.proxy.password || null,
+            row.proxy_id,
+          );
+        } else {
+          // Create new proxy record and assign to profile
+          const crypto = require('crypto');
+          const proxyId = crypto.randomUUID();
+          this.db.prepare(
+            `INSERT INTO proxies (id, protocol, host, port, username, password, status, last_checked_at)
+             VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`
+          ).run(
+            proxyId,
+            config.proxy.protocol,
+            config.proxy.host,
+            config.proxy.port,
+            config.proxy.username || null,
+            config.proxy.password || null,
+          );
+          updates.push('proxy_id = ?');
+          params.push(proxyId);
+        }
+      } else {
+        // Proxy explicitly set to undefined/null — unassign proxy
+        updates.push('proxy_id = ?');
+        params.push(null);
+      }
+    }
+
     // Always update updated_at
     updates.push('updated_at = ?');
     params.push(now);
@@ -446,5 +574,19 @@ export class ProfileManager {
    */
   isProfileOpen(profileId: string): boolean {
     return this.openBrowsers.has(profileId);
+  }
+
+  /**
+   * Closes all open browser contexts. Called when the app is shutting down.
+   */
+  async closeAllProfiles(): Promise<void> {
+    const openIds = [...this.openBrowsers.keys()];
+    for (const profileId of openIds) {
+      try {
+        await this.closeProfile(profileId);
+      } catch {
+        // Ignore errors during shutdown
+      }
+    }
   }
 }

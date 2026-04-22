@@ -1,8 +1,10 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { setupIPC } from './ipc-handlers';
+import type { ProfileManager } from './services/profile-manager/profile-manager';
 
 let mainWindow: BrowserWindow | null = null;
+let profileManager: ProfileManager | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -31,7 +33,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  setupIPC();
+  const services = setupIPC();
+  profileManager = services.profileManager;
   createWindow();
 
   app.on('activate', () => {
@@ -39,6 +42,16 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+// Close all browsers before quitting
+app.on('before-quit', async (event) => {
+  if (profileManager) {
+    event.preventDefault();
+    await profileManager.closeAllProfiles();
+    profileManager = null;
+    app.quit();
+  }
 });
 
 app.on('window-all-closed', () => {

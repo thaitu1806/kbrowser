@@ -55,6 +55,11 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
         setOpenStatus(data.message);
       });
     }
+    // Auto-poll every 3 seconds to detect browser close
+    const interval = setInterval(() => {
+      if (api) loadProfiles();
+    }, 3000);
+    return () => clearInterval(interval);
   }, [loadProfiles]);
 
   const filteredProfiles = profiles.filter((p) =>
@@ -260,7 +265,7 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
               <th className="col-ip">Proxy</th>
               <th className="col-lastop">Last opened</th>
               <th className="col-platform">Browser</th>
-              <th className="col-tags">Status</th>
+              <th className="col-tags">Tags</th>
               <th className="col-action">Action</th>
               <th className="col-more"></th>
             </tr>
@@ -308,7 +313,7 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
                   </span>
                 </td>
                 <td className="col-tags">
-                  <span className={`badge badge-${profile.status}`}>{profile.status}</span>
+                  <span className="tag-dash">-</span>
                 </td>
                 <td className="col-action">
                   {profile.status === 'closed' ? (
@@ -317,10 +322,10 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
                       onClick={() => handleOpen(profile.id)}
                       disabled={openingId === profile.id}
                     >
-                      {openingId === profile.id ? '⏳' : 'Open'}
+                      {openingId === profile.id ? '⏳' : '✅ Open'}
                     </button>
                   ) : (
-                    <button className="btn-close-profile" onClick={() => handleClose(profile.id)}>Close</button>
+                    <button className="btn-action-close" onClick={() => handleClose(profile.id)}>🔴 Close</button>
                   )}
                 </td>
                 <td className="col-more">

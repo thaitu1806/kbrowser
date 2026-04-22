@@ -26,7 +26,7 @@ interface ElectronAPI {
   addProxy(config: ProxyConfig): Promise<Proxy>;
   removeProxy(id: string): Promise<void>;
   checkProxy(id: string): Promise<ProxyCheckResult>;
-  checkProxyDirect(config: ProxyConfig): Promise<{
+  checkProxyDirect(config: ProxyConfig, ipChecker?: string): Promise<{
     success: boolean;
     ip?: string;
     country?: string;

@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addProxy: (config: unknown) => ipcRenderer.invoke('proxy:add', config),
   removeProxy: (id: string) => ipcRenderer.invoke('proxy:remove', id),
   checkProxy: (id: string) => ipcRenderer.invoke('proxy:check', id),
-  checkProxyDirect: (config: unknown) => ipcRenderer.invoke('proxy:checkDirect', config),
+  checkProxyDirect: (config: unknown, ipChecker?: string) => ipcRenderer.invoke('proxy:checkDirect', config, ipChecker),
   assignProxy: (proxyId: string, profileId: string) => ipcRenderer.invoke('proxy:assign', proxyId, profileId),
   validateProxy: (profileId: string) => ipcRenderer.invoke('proxy:validate', profileId),
 

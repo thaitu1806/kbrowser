@@ -446,7 +446,7 @@
 }
 
 .profiles-table td {
-  padding: 10px 12px;
+  padding: 12px 12px;
   border-bottom: 1px solid var(--border-light);
   font-size: 13px;
   vertical-align: middle;
@@ -462,12 +462,12 @@
 
 .col-checkbox { width: 40px; text-align: center; }
 .col-group { width: 100px; }
-.col-name { min-width: 250px; }
-.col-ip { width: 180px; }
+.col-name { min-width: 280px; }
+.col-ip { width: 200px; }
 .col-lastop { width: 90px; }
 .col-platform { width: 80px; }
-.col-tags { width: 60px; }
-.col-action { width: 80px; }
+.col-tags { width: 50px; }
+.col-action { width: 100px; text-align: center; }
 .col-more { width: 30px; }
 
 .group-label {
@@ -539,35 +539,56 @@
   color: var(--text-muted);
 }
 
-/* Open Button (green, like AdsPower) */
+/* Open Button (AdsPower style) */
 .btn-open {
-  background: var(--success);
+  background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 5px 20px;
+  border-radius: 20px;
+  padding: 6px 22px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .btn-open:hover {
-  background: #16a34a;
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(74, 108, 247, 0.3);
 }
 
-.btn-close-profile {
-  background: var(--text-muted);
+.btn-open:disabled {
+  opacity: 0.5;
+  cursor: wait;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-action-close {
+  background: var(--danger);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 5px 16px;
+  border-radius: 20px;
+  padding: 6px 22px;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
-.btn-close-profile:hover {
-  background: #718096;
+.btn-action-close:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
 .btn-more {

@@ -230,6 +230,11 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
       const profile = await api.getProfile(editProfileId);
       if (!profile) return;
       const fp = profile.fingerprintConfig;
+      // proxyConfig is returned by the IPC handler alongside the profile
+      const profileData = profile as Record<string, unknown>;
+      const proxy = profileData.proxyConfig as {
+        protocol: string; host: string; port: number; username?: string; password?: string;
+      } | null | undefined;
       setForm((prev) => ({
         ...prev,
         name: profile.name,
@@ -244,6 +249,11 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         cpuCores: fp?.cpu.cores || 4,
         ramSize: fp?.ram.sizeGB || 8,
         webrtc: fp?.webrtc === 'disable' ? 'disabled' : fp?.webrtc === 'proxy' ? 'forward' : 'real',
+        proxyType: proxy?.protocol ? proxy.protocol as ProxyType : 'none',
+        proxyHost: proxy?.host || '',
+        proxyPort: proxy?.port ? String(proxy.port) : '',
+        proxyUser: proxy?.username || '',
+        proxyPass: proxy?.password || '',
       }));
     };
     loadProfile();
@@ -284,7 +294,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           port: parseInt(form.proxyPort) || 0,
           username: form.proxyUser || undefined,
           password: form.proxyPass || undefined,
-        });
+        }, form.ipChecker);
         if (result.success) {
           const lines = ['Connection test passed!'];
           if (result.ip) lines.push(`IP: ${result.ip}`);
@@ -348,8 +358,18 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
       if (api) {
         if (isEdit && editProfileId) {
           await api.updateProfile(editProfileId, config);
+          // Also update proxy if changed
+          if (config.proxy && config.proxy.host) {
+            const proxy = await api.addProxy(config.proxy);
+            await api.assignProxy(proxy.id, editProfileId);
+          }
         } else {
-          await api.createProfile(config);
+          const profile = await api.createProfile(config);
+          // Assign proxy if configured
+          if (config.proxy && config.proxy.host) {
+            const proxy = await api.addProxy(config.proxy);
+            await api.assignProxy(proxy.id, profile.id);
+          }
         }
       }
       onSave?.(form);

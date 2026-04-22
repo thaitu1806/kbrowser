@@ -27,8 +27,8 @@ let rpaEngine: RPAEngine;
 let extensionCenter: ExtensionCenter;
 let profileSerializer: ProfileSerializer;
 
-/** Initialize all services and register IPC handlers. */
-export function setupIPC(): void {
+/** Initialize all services and register IPC handlers. Returns profileManager for cleanup. */
+export function setupIPC(): { profileManager: ProfileManager } {
   const userDataPath = app.getPath('userData');
   const dbPath = path.join(userDataPath, 'digital-identity.db');
   const profilesBasePath = path.join(userDataPath, 'profiles-data');
@@ -60,6 +60,24 @@ export function setupIPC(): void {
       last_used_at: string | null; created_at: string; updated_at: string;
     } | undefined;
     if (!row) return null;
+
+    // Load proxy details if assigned
+    let proxyConfig: { protocol: string; host: string; port: number; username?: string; password?: string } | null = null;
+    if (row.proxy_id) {
+      const proxyRow = db.prepare('SELECT protocol, host, port, username, password FROM proxies WHERE id = ?').get(row.proxy_id) as {
+        protocol: string; host: string; port: number; username: string | null; password: string | null;
+      } | undefined;
+      if (proxyRow) {
+        proxyConfig = {
+          protocol: proxyRow.protocol,
+          host: proxyRow.host,
+          port: proxyRow.port,
+          username: proxyRow.username || undefined,
+          password: proxyRow.password || undefined,
+        };
+      }
+    }
+
     return {
       id: row.id,
       name: row.name,
@@ -68,6 +86,7 @@ export function setupIPC(): void {
       status: row.status,
       fingerprintConfig: row.fingerprint_config ? JSON.parse(row.fingerprint_config) : null,
       proxyId: row.proxy_id,
+      proxyConfig,
       syncEnabled: row.sync_enabled === 1,
       syncStatus: row.sync_status,
       lastUsedAt: row.last_used_at,
@@ -149,13 +168,52 @@ export function setupIPC(): void {
     return proxyManager.checkProxy(proxyId);
   });
 
-  /** Check proxy connectivity and get geo info without saving to DB. */
-  ipcMain.handle('proxy:checkDirect', async (_event, config: ProxyConfig) => {
+  /**
+   * Check proxy connectivity and get geo info without saving to DB.
+   * Supports HTTP, HTTPS, and SOCKS5 proxies by actually routing traffic through them.
+   * Supports IP checker selection: ip-api.com, ipinfo.io, IP2Location.
+   */
+  ipcMain.handle('proxy:checkDirect', async (_event, config: ProxyConfig, ipChecker?: string) => {
     const http = await import('http');
-    const https = await import('https');
+    const net = await import('net');
     const start = Date.now();
 
-    return new Promise<{
+    // Determine IP checker URL and response parser based on user selection
+    const checker = (ipChecker || 'ip-api.com').toLowerCase();
+    let checkerHost: string;
+    let checkerPath: string;
+    let parseResponse: (data: string) => { ip?: string; country?: string; region?: string; city?: string };
+
+    if (checker.includes('ipinfo')) {
+      checkerHost = 'ipinfo.io';
+      checkerPath = '/json';
+      parseResponse = (data: string) => {
+        const json = JSON.parse(data);
+        return { ip: json.ip, country: json.country, region: json.region, city: json.city };
+      };
+    } else if (checker.includes('ip2location')) {
+      checkerHost = 'api.ip2location.io';
+      checkerPath = '/';
+      parseResponse = (data: string) => {
+        const json = JSON.parse(data);
+        return { ip: json.ip, country: json.country_name || json.country_code, region: json.region_name, city: json.city_name };
+      };
+    } else {
+      // Default: ip-api.com
+      checkerHost = 'ip-api.com';
+      checkerPath = '/json/?fields=query,country,regionName,city,status';
+      parseResponse = (data: string) => {
+        const json = JSON.parse(data);
+        if (json.status === 'success') {
+          return { ip: json.query, country: json.country, region: json.regionName, city: json.city };
+        }
+        return { ip: json.query || 'Unknown' };
+      };
+    }
+
+    const checkerUrl = `http://${checkerHost}${checkerPath}`;
+
+    type CheckResult = {
       success: boolean;
       ip?: string;
       country?: string;
@@ -163,44 +221,148 @@ export function setupIPC(): void {
       city?: string;
       responseTimeMs: number;
       error?: string;
-    }>((resolve) => {
-      const timeout = setTimeout(() => {
-        resolve({ success: false, responseTimeMs: Date.now() - start, error: 'Timeout after 15s' });
-      }, 15000);
+    };
 
-      // Use ip-api.com for geo lookup (free, no key needed)
-      const req = http.default.get('http://ip-api.com/json/?fields=query,country,regionName,city,status', {
-        timeout: 15000,
-      }, (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-        res.on('end', () => {
+    /**
+     * Makes an HTTP GET request over an already-connected socket and parses the geo response.
+     */
+    const httpGetOverSocket = (socket: import('net').Socket): Promise<CheckResult> => {
+      return new Promise<CheckResult>((resolve) => {
+        const timeout = setTimeout(() => {
+          socket.destroy();
+          resolve({ success: false, responseTimeMs: Date.now() - start, error: 'Timeout after 15s' });
+        }, 15000);
+
+        const reqStr = `GET ${checkerPath} HTTP/1.1\r\nHost: ${checkerHost}\r\nConnection: close\r\nAccept: application/json\r\n\r\n`;
+        socket.write(reqStr);
+
+        let rawData = '';
+        socket.on('data', (chunk: Buffer) => { rawData += chunk.toString(); });
+        socket.on('end', () => {
           clearTimeout(timeout);
           const elapsed = Date.now() - start;
           try {
-            const json = JSON.parse(data);
-            if (json.status === 'success') {
-              resolve({
-                success: true,
-                ip: json.query,
-                country: json.country,
-                region: json.regionName,
-                city: json.city,
-                responseTimeMs: elapsed,
-              });
-            } else {
-              resolve({ success: true, ip: json.query || 'Unknown', responseTimeMs: elapsed });
+            // Extract body from HTTP response (after \r\n\r\n)
+            const bodyStart = rawData.indexOf('\r\n\r\n');
+            const body = bodyStart >= 0 ? rawData.slice(bodyStart + 4) : rawData;
+            // Handle chunked transfer encoding
+            let jsonBody = body;
+            if (rawData.toLowerCase().includes('transfer-encoding: chunked')) {
+              // Parse chunked body: each chunk is "size\r\ndata\r\n"
+              const chunks: string[] = [];
+              let remaining = body;
+              while (remaining.length > 0) {
+                const lineEnd = remaining.indexOf('\r\n');
+                if (lineEnd < 0) break;
+                const chunkSize = parseInt(remaining.slice(0, lineEnd), 16);
+                if (isNaN(chunkSize) || chunkSize === 0) break;
+                chunks.push(remaining.slice(lineEnd + 2, lineEnd + 2 + chunkSize));
+                remaining = remaining.slice(lineEnd + 2 + chunkSize + 2);
+              }
+              jsonBody = chunks.join('');
             }
+            const geo = parseResponse(jsonBody.trim());
+            resolve({ success: true, ...geo, responseTimeMs: elapsed });
           } catch {
-            resolve({ success: true, ip: 'Connected', responseTimeMs: elapsed });
+            resolve({ success: true, ip: 'Connected (parse error)', responseTimeMs: elapsed });
           }
         });
+        socket.on('error', (err: Error) => {
+          clearTimeout(timeout);
+          resolve({ success: false, responseTimeMs: Date.now() - start, error: err.message });
+        });
       });
-      req.on('error', (err: Error) => {
-        clearTimeout(timeout);
-        resolve({ success: false, responseTimeMs: Date.now() - start, error: err.message });
-      });
-    });
+    };
+
+    try {
+      if (config.protocol === 'socks5') {
+        // ─── SOCKS5 proxy connection ───
+        const { SocksClient } = await import('socks');
+        const socksOptions: import('socks').SocksClientOptions = {
+          proxy: {
+            host: config.host,
+            port: config.port,
+            type: 5,
+            userId: config.username || undefined,
+            password: config.password || undefined,
+          },
+          command: 'connect' as const,
+          destination: {
+            host: checkerHost,
+            port: 80,
+          },
+          timeout: 15000,
+        };
+
+        const { socket } = await SocksClient.createConnection(socksOptions);
+        return await httpGetOverSocket(socket);
+
+      } else {
+        // ─── HTTP/HTTPS proxy via CONNECT or direct GET ───
+        return await new Promise<CheckResult>((resolve) => {
+          const timeout = setTimeout(() => {
+            resolve({ success: false, responseTimeMs: Date.now() - start, error: 'Timeout after 15s' });
+          }, 15000);
+
+          // Connect to the proxy server
+          const proxySocket = net.default.connect(config.port, config.host, () => {
+            // For HTTP proxy, send the request directly through the proxy
+            let reqStr = `GET ${checkerUrl} HTTP/1.1\r\nHost: ${checkerHost}\r\nConnection: close\r\nAccept: application/json\r\n`;
+            // Add proxy authentication if provided
+            if (config.username && config.password) {
+              const auth = Buffer.from(`${config.username}:${config.password}`).toString('base64');
+              reqStr += `Proxy-Authorization: Basic ${auth}\r\n`;
+            }
+            reqStr += '\r\n';
+            proxySocket.write(reqStr);
+          });
+
+          let rawData = '';
+          proxySocket.on('data', (chunk: Buffer) => { rawData += chunk.toString(); });
+          proxySocket.on('end', () => {
+            clearTimeout(timeout);
+            const elapsed = Date.now() - start;
+            try {
+              const bodyStart = rawData.indexOf('\r\n\r\n');
+              const body = bodyStart >= 0 ? rawData.slice(bodyStart + 4) : rawData;
+              let jsonBody = body;
+              if (rawData.toLowerCase().includes('transfer-encoding: chunked')) {
+                const chunks: string[] = [];
+                let remaining = body;
+                while (remaining.length > 0) {
+                  const lineEnd = remaining.indexOf('\r\n');
+                  if (lineEnd < 0) break;
+                  const chunkSize = parseInt(remaining.slice(0, lineEnd), 16);
+                  if (isNaN(chunkSize) || chunkSize === 0) break;
+                  chunks.push(remaining.slice(lineEnd + 2, lineEnd + 2 + chunkSize));
+                  remaining = remaining.slice(lineEnd + 2 + chunkSize + 2);
+                }
+                jsonBody = chunks.join('');
+              }
+              const geo = parseResponse(jsonBody.trim());
+              resolve({ success: true, ...geo, responseTimeMs: elapsed });
+            } catch {
+              resolve({ success: true, ip: 'Connected (parse error)', responseTimeMs: elapsed });
+            }
+          });
+          proxySocket.on('error', (err: Error) => {
+            clearTimeout(timeout);
+            resolve({ success: false, responseTimeMs: Date.now() - start, error: err.message });
+          });
+          proxySocket.setTimeout(15000, () => {
+            proxySocket.destroy();
+            clearTimeout(timeout);
+            resolve({ success: false, responseTimeMs: Date.now() - start, error: 'Connection timeout' });
+          });
+        });
+      }
+    } catch (err: unknown) {
+      return {
+        success: false,
+        responseTimeMs: Date.now() - start,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
   });
 
   ipcMain.handle('proxy:assign', async (_event, proxyId: string, profileId: string) => {
@@ -308,6 +470,8 @@ export function setupIPC(): void {
   ipcMain.handle('serializer:validate', async (_event, json: string) => {
     return profileSerializer.validate(json);
   });
+
+  return { profileManager };
 }
 
 // ─── Helpers ───
