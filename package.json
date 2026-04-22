@@ -1,0 +1,43 @@
+{
+  "name": "digital-identity-management",
+  "version": "0.1.0",
+  "description": "Hệ thống Quản lý Danh tính Số - Desktop application for managing isolated browser profiles",
+  "main": "dist/main/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "dev:electron": "npm run build:main && electron .",
+    "postinstall": "electron-rebuild",
+    "build": "tsc && vite build && npm run build:main",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "preview": "vite preview",
+    "electron": "electron .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.9.0",
+    "express": "^4.21.2",
+    "playwright": "1.52.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^4.17.21",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/supertest": "^6.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "fast-check": "^3.23.2",
+    "supertest": "^7.0.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8"
+  }
+}
