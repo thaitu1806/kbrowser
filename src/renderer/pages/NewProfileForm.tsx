@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FingerprintConfig, ProxyConfig } from '@shared/types';
 
 type TabId = 'general' | 'proxy' | 'platform' | 'fingerprint' | 'advanced';
@@ -219,6 +219,38 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
   const [proxyCheckResult, setProxyCheckResult] = useState<{ status: string; message: string } | null>(null);
   const [proxyChecking, setProxyChecking] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({
+    general: null, proxy: null, platform: null, fingerprint: null, advanced: null,
+  });
+
+  // Scroll to section when tab is clicked
+  const scrollToSection = useCallback((tabId: TabId) => {
+    const el = sectionRefs.current[tabId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    setActiveTab(tabId);
+  }, []);
+
+  // Update active tab based on scroll position
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop + 60;
+      let current: TabId = 'general';
+      for (const tab of TABS) {
+        const el = sectionRefs.current[tab.id];
+        if (el && el.offsetTop <= scrollTop) {
+          current = tab.id;
+        }
+      }
+      setActiveTab(current);
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Load profile data when editing
   useEffect(() => {
@@ -255,6 +287,13 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         proxyUser: proxy?.username || '',
         proxyPass: proxy?.password || '',
       }));
+      // Load cookies
+      try {
+        const cookieData = await api.getProfileCookies(editProfileId);
+        if (cookieData) {
+          setForm((prev) => ({ ...prev, cookie: cookieData }));
+        }
+      } catch { /* ignore */ }
     };
     loadProfile();
   }, [editProfileId]);
@@ -380,23 +419,24 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
 
   return (
     <div className="npf">
-      {/* Tabs */}
+      {/* Tabs — sticky at top */}
       <div className="npf-tabs">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             className={`npf-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => scrollToSection(tab.id)}
           >
             {tab.label}
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      <div className="npf-content">
-        {activeTab === 'general' && (
-          <div className="npf-section">
+      {/* Tab Content — all sections visible, scrollable */}
+      <div className="npf-content" ref={contentRef}>
+
+        {/* ═══ GENERAL ═══ */}
+        <div className="npf-section" ref={(el) => { sectionRefs.current.general = el; }} id="section-general">
             <FormRow label="Name">
               <input
                 value={form.name}
@@ -523,10 +563,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
               <span className="char-count">{form.remark.length} / 1500</span>
             </FormRow>
           </div>
-        )}
 
-        {activeTab === 'proxy' && (
-          <div className="npf-section">
+        {/* ═══ PROXY ═══ */}
+        <div className="npf-section" ref={(el) => { sectionRefs.current.proxy = el; }} id="section-proxy">
             <div className="npf-two-col">
               <div className="npf-col-main">
                 <div className="section-label">Proxy</div>
@@ -644,10 +683,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
               </div>
             </div>
           </div>
-        )}
 
-        {activeTab === 'platform' && (
-          <div className="npf-section">
+        {/* ═══ PLATFORM ═══ */}
+        <div className="npf-section" ref={(el) => { sectionRefs.current.platform = el; }} id="section-platform">
             <div className="section-label">Platform</div>
             <FormRow label="Platform">
               <button className="add-platform-btn">⊕ Add Platform Account</button>
@@ -716,10 +754,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
               </div>
             </FormRow>
           </div>
-        )}
 
-        {activeTab === 'fingerprint' && (
-          <div className="npf-section">
+        {/* ═══ FINGERPRINT ═══ */}
+        <div className="npf-section" ref={(el) => { sectionRefs.current.fingerprint = el; }} id="section-fingerprint">
             <FormRow label="Fonts">
               <div className="toggle-group">
                 <button className={`toggle-btn ${form.fonts === 'default' ? 'active' : ''}`} onClick={() => update('fonts', 'default')}>Default</button>
@@ -777,10 +814,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
 
             <ShowMoreSection form={form} update={update} />
           </div>
-        )}
 
-        {activeTab === 'advanced' && (
-          <div className="npf-section">
+        {/* ═══ ADVANCED ═══ */}
+        <div className="npf-section" ref={(el) => { sectionRefs.current.advanced = el; }} id="section-advanced">
             <div className="section-label">Advanced</div>
 
             <FormRow label="Extension">
@@ -844,7 +880,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
               </div>
             </FormRow>
           </div>
-        )}
+
       </div>
 
       {/* Footer */}

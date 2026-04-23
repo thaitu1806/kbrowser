@@ -217,6 +217,21 @@ export class ProfileManager {
     // Launch persistent browser context with isolated user data dir
     const context = await browserType.launchPersistentContext(profileDir, launchOptions);
 
+    // Restore saved cookies from database
+    try {
+      const cookieRow = this.db
+        .prepare('SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?')
+        .get(profileId, 'cookie') as { data: Buffer | null } | undefined;
+      if (cookieRow?.data) {
+        const cookies = JSON.parse(cookieRow.data.toString('utf-8'));
+        if (Array.isArray(cookies) && cookies.length > 0) {
+          await context.addCookies(cookies);
+        }
+      }
+    } catch {
+      // Ignore cookie restore errors
+    }
+
     // Inject fingerprint spoofing scripts
     if (fpConfig) {
       // Hardware spoofing: CPU cores and RAM
@@ -279,8 +294,38 @@ export class ProfileManager {
     // Track the browser context for later cleanup
     this.openBrowsers.set(profileId, context);
 
+    // Save cookies before browser closes
+    const saveCookies = async () => {
+      try {
+        const cookies = await context.cookies();
+        if (cookies.length > 0) {
+          const cookieJson = JSON.stringify(cookies);
+          const now3 = new Date().toISOString();
+          // Save to profile_data table
+          const existing = this.db
+            .prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')
+            .get(profileId, 'cookie') as { id: string } | undefined;
+          if (existing) {
+            this.db
+              .prepare('UPDATE profile_data SET data = ?, updated_at = ? WHERE id = ?')
+              .run(Buffer.from(cookieJson), now3, existing.id);
+          } else {
+            this.db
+              .prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
+              .run(crypto.randomUUID(), profileId, 'cookie', Buffer.from(cookieJson), now3);
+          }
+        }
+      } catch {
+        // Context may already be closed
+      }
+    };
+
+    // Auto-save cookies every 30 seconds while browser is open
+    const cookieInterval = setInterval(saveCookies, 30000);
+
     // Listen for browser close event (user closes the window)
     context.on('close', () => {
+      clearInterval(cookieInterval);
       this.openBrowsers.delete(profileId);
       const now2 = new Date().toISOString();
       try {
@@ -328,6 +373,31 @@ export class ProfileManager {
 
     // Get the browser context from the tracking Map
     const context = this.openBrowsers.get(profileId);
+
+    // Save cookies before closing
+    if (context) {
+      try {
+        const cookies = await context.cookies();
+        if (cookies.length > 0) {
+          const cookieJson = JSON.stringify(cookies);
+          const now3 = new Date().toISOString();
+          const existing = this.db
+            .prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')
+            .get(profileId, 'cookie') as { id: string } | undefined;
+          if (existing) {
+            this.db
+              .prepare('UPDATE profile_data SET data = ?, updated_at = ? WHERE id = ?')
+              .run(Buffer.from(cookieJson), now3, existing.id);
+          } else {
+            this.db
+              .prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
+              .run(crypto.randomUUID(), profileId, 'cookie', Buffer.from(cookieJson), now3);
+          }
+        }
+      } catch {
+        // Context may already be closing
+      }
+    }
 
     // If the browser context exists, close it
     if (context) {

@@ -322,7 +322,9 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
                       onClick={() => handleOpen(profile.id)}
                       disabled={openingId === profile.id}
                     >
-                      {openingId === profile.id ? '⏳' : '✅ Open'}
+                      {openingId === profile.id ? '⏳' : (
+                        <>{profile.browserType === 'chromium' ? '🌐' : '🦊'} Open</>
+                      )}
                     </button>
                   ) : (
                     <button className="btn-action-close" onClick={() => handleClose(profile.id)}>🔴 Close</button>

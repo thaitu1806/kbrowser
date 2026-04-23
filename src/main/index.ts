@@ -5,6 +5,7 @@ import type { ProfileManager } from './services/profile-manager/profile-manager'
 
 let mainWindow: BrowserWindow | null = null;
 let profileManager: ProfileManager | null = null;
+let isQuitting = false;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -33,8 +34,12 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  const services = setupIPC();
-  profileManager = services.profileManager;
+  try {
+    const services = setupIPC();
+    profileManager = services.profileManager;
+  } catch (err) {
+    console.error('Failed to initialize services:', err);
+  }
   createWindow();
 
   app.on('activate', () => {
@@ -45,13 +50,16 @@ app.whenReady().then(() => {
 });
 
 // Close all browsers before quitting
-app.on('before-quit', async (event) => {
-  if (profileManager) {
-    event.preventDefault();
-    await profileManager.closeAllProfiles();
-    profileManager = null;
-    app.quit();
-  }
+app.on('before-quit', (event) => {
+  if (isQuitting || !profileManager) return;
+  isQuitting = true;
+  event.preventDefault();
+  profileManager.closeAllProfiles()
+    .catch(() => {})
+    .finally(() => {
+      profileManager = null;
+      app.quit();
+    });
 });
 
 app.on('window-all-closed', () => {

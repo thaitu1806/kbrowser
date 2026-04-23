@@ -150,6 +150,35 @@ export function setupIPC(): { profileManager: ProfileManager } {
     return profileManager.updateProfile(profileId, config);
   });
 
+  ipcMain.handle('profile:getCookies', async (_event, profileId: string) => {
+    const row = db.prepare('SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?')
+      .get(profileId, 'cookie') as { data: Buffer | null } | undefined;
+    if (!row || !row.data) return '';
+    return row.data.toString('utf-8');
+  });
+
+  ipcMain.handle('profile:saveCookies', async (_event, profileId: string, cookieJson: string) => {
+    const now = new Date().toISOString();
+    const existing = db.prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')
+      .get(profileId, 'cookie') as { id: string } | undefined;
+    if (existing) {
+      db.prepare('UPDATE profile_data SET data = ?, updated_at = ? WHERE id = ?')
+        .run(Buffer.from(cookieJson), now, existing.id);
+    } else {
+      const crypto = require('crypto');
+      db.prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(crypto.randomUUID(), profileId, 'cookie', Buffer.from(cookieJson), now);
+    }
+  });
+
+  ipcMain.handle('profile:getCookies', async (_event, profileId: string) => {
+    const row = db.prepare(
+      'SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?',
+    ).get(profileId, 'cookie') as { data: Buffer | null } | undefined;
+    if (!row || !row.data) return '';
+    return row.data.toString('utf-8');
+  });
+
   // ─── Proxy handlers ───
   ipcMain.handle('proxy:list', async () => {
     const rows = db.prepare('SELECT * FROM proxies').all();
