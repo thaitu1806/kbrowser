@@ -171,14 +171,6 @@ export function setupIPC(): { profileManager: ProfileManager } {
     }
   });
 
-  ipcMain.handle('profile:getCookies', async (_event, profileId: string) => {
-    const row = db.prepare(
-      'SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?',
-    ).get(profileId, 'cookie') as { data: Buffer | null } | undefined;
-    if (!row || !row.data) return '';
-    return row.data.toString('utf-8');
-  });
-
   // ─── Proxy handlers ───
   ipcMain.handle('proxy:list', async () => {
     const rows = db.prepare('SELECT * FROM proxies').all();
