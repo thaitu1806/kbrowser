@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteProfile: (id: string) => ipcRenderer.invoke('profile:delete', id),
   updateProfile: (id: string, config: unknown) => ipcRenderer.invoke('profile:update', id, config),
   getProfileCookies: (id: string) => ipcRenderer.invoke('profile:getCookies', id),
+  getProfileTabs: (id: string) => ipcRenderer.invoke('profile:getTabs', id),
   saveProfileCookies: (id: string, cookieJson: string) => ipcRenderer.invoke('profile:saveCookies', id, cookieJson),
 
   // ─── Proxies ───

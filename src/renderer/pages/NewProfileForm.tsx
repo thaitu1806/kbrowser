@@ -294,6 +294,16 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           setForm((prev) => ({ ...prev, cookie: cookieData }));
         }
       } catch { /* ignore */ }
+      // Load saved tabs
+      try {
+        const tabsData = await api.getProfileTabs(editProfileId);
+        if (tabsData) {
+          const urls: string[] = JSON.parse(tabsData);
+          if (Array.isArray(urls) && urls.length > 0) {
+            setForm((prev) => ({ ...prev, tabs: urls.join('\n') }));
+          }
+        }
+      } catch { /* ignore */ }
     };
     loadProfile();
   }, [editProfileId]);

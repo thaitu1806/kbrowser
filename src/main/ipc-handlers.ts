@@ -157,6 +157,13 @@ export function setupIPC(): { profileManager: ProfileManager } {
     return row.data.toString('utf-8');
   });
 
+  ipcMain.handle('profile:getTabs', async (_event, profileId: string) => {
+    const row = db.prepare('SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?')
+      .get(profileId, 'cache') as { data: Buffer | null } | undefined;
+    if (!row || !row.data) return '';
+    return row.data.toString('utf-8');
+  });
+
   ipcMain.handle('profile:saveCookies', async (_event, profileId: string, cookieJson: string) => {
     const now = new Date().toISOString();
     const existing = db.prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')

@@ -21,6 +21,7 @@ interface ElectronAPI {
   deleteProfile(id: string): Promise<void>;
   updateProfile(id: string, config: Partial<ProfileConfig>): Promise<Profile>;
   getProfileCookies(id: string): Promise<string>;
+  getProfileTabs(id: string): Promise<string>;
   saveProfileCookies(id: string, cookieJson: string): Promise<void>;
 
   // Proxies
