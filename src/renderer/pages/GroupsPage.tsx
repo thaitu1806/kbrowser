@@ -9,7 +9,7 @@ interface Group {
   created_at: string;
 }
 
-export default function GroupsPage() {
+export default function GroupsPage({ onNavigateToGroup }: { onNavigateToGroup?: (groupName: string) => void }) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -75,7 +75,15 @@ export default function GroupsPage() {
             <tbody>
               {groups.map((g) => (
                 <tr key={g.id}>
-                  <td>{g.name}</td>
+                  <td>
+                    <span
+                      className="group-link"
+                      style={{ cursor: 'pointer', color: '#4a6cf7', fontWeight: 500 }}
+                      onClick={() => onNavigateToGroup?.(g.name)}
+                    >
+                      {g.name}
+                    </span>
+                  </td>
                   <td>{g.remark || '—'}</td>
                   <td>{new Date(g.created_at).toLocaleDateString()}</td>
                   <td>

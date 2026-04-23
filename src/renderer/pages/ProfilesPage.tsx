@@ -17,13 +17,13 @@ const defaultFingerprint: FingerprintConfig = {
   oscpu: 'Windows NT 10.0; Win64; x64',
 };
 
-export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewProfile?: () => void; onEditProfile?: (id: string) => void }) {
+export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroupFilter }: { onNewProfile?: () => void; onEditProfile?: (id: string) => void; initialGroupFilter?: string | null }) {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [groupFilter, setGroupFilter] = useState('All groups');
+  const [groupFilter, setGroupFilter] = useState(initialGroupFilter || 'All groups');
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openStatus, setOpenStatus] = useState<string | null>(null);
   const [profileGroups, setProfileGroups] = useState<Record<string, string>>({});

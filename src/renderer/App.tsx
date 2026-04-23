@@ -52,6 +52,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [editProfileId, setEditProfileId] = useState<string | null>(null);
+  const [initialGroupFilter, setInitialGroupFilter] = useState<string | null>(null);
 
   const renderPage = () => {
     switch (activePage) {
@@ -59,6 +60,7 @@ function App() {
         return <ProfilesPage
           onNewProfile={() => { setEditProfileId(null); setActivePage('new-profile'); }}
           onEditProfile={(id: string) => { setEditProfileId(id); setActivePage('new-profile'); }}
+          initialGroupFilter={initialGroupFilter}
         />;
       case 'new-profile':
         return <NewProfileForm
@@ -67,7 +69,10 @@ function App() {
           onCancel={() => { setEditProfileId(null); setActivePage('profiles'); }}
         />;
       case 'groups':
-        return <GroupsPage />;
+        return <GroupsPage onNavigateToGroup={(name: string) => {
+          setInitialGroupFilter(name);
+          setActivePage('profiles');
+        }} />;
       case 'fingerprint':
         return <FingerprintConfigForm />;
       case 'proxies':
