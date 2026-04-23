@@ -37,6 +37,7 @@ interface ElectronAPI {
   addProxy(config: ProxyConfig): Promise<Proxy>;
   removeProxy(id: string): Promise<void>;
   checkProxy(id: string): Promise<ProxyCheckResult>;
+  updateProxyStatus(id: string, status: string, responseTimeMs: number): Promise<void>;
   checkProxyDirect(config: ProxyConfig, ipChecker?: string): Promise<{
     success: boolean;
     ip?: string;
@@ -47,6 +48,8 @@ interface ElectronAPI {
     error?: string;
   }>;
   assignProxy(proxyId: string, profileId: string): Promise<void>;
+  updateProxyStatus(proxyId: string, status: string, responseTimeMs: number): Promise<void>;
+  updateProxyStatus(proxyId: string, status: string, responseTimeMs: number): Promise<void>;
   validateProxy(profileId: string): Promise<{ status: string; proxy: Proxy | null; message: string }>;
 
   // Fingerprint

@@ -14,3 +14,4 @@ export { default as ActionLogsPage } from './ActionLogsPage';
 export { default as ExtensionsPage } from './ExtensionsPage';
 export { default as CloudSyncPage } from './CloudSyncPage';
 export { default as IPRotationPage } from './IPRotationPage';
+export { default as TrashPage } from './TrashPage';

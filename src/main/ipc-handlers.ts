@@ -241,6 +241,12 @@ export function setupIPC(): { profileManager: ProfileManager } {
     return proxyManager.checkProxy(proxyId);
   });
 
+  ipcMain.handle('proxy:updateStatus', async (_event, proxyId: string, status: string, responseTimeMs: number) => {
+    const now = new Date().toISOString();
+    db.prepare('UPDATE proxies SET status = ?, response_time_ms = ?, last_checked_at = ? WHERE id = ?')
+      .run(status, responseTimeMs, now, proxyId);
+  });
+
   /**
    * Check proxy connectivity and get geo info without saving to DB.
    * Supports HTTP, HTTPS, and SOCKS5 proxies by actually routing traffic through them.

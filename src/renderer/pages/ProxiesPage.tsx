@@ -1,28 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Proxy, ProxyConfig } from '@shared/types';
 
-const DEMO_PROXIES: Proxy[] = [
-  {
-    id: 'proxy-1',
-    protocol: 'http',
-    host: '192.168.1.100',
-    port: 8080,
-    username: 'user1',
-    password: 'pass1',
-    status: 'alive',
-    responseTimeMs: 120,
-    lastCheckedAt: '2024-01-16T10:00:00Z',
-  },
-  {
-    id: 'proxy-2',
-    protocol: 'socks5',
-    host: '10.0.0.50',
-    port: 1080,
-    status: 'dead',
-    responseTimeMs: null,
-    lastCheckedAt: '2024-01-15T08:00:00Z',
-  },
-];
+const api = typeof window !== 'undefined' ? window.electronAPI : null;
 
 const defaultProxyConfig: ProxyConfig = {
   protocol: 'http',
@@ -31,12 +10,48 @@ const defaultProxyConfig: ProxyConfig = {
 };
 
 export default function ProxiesPage() {
-  const [proxies, setProxies] = useState<Proxy[]>(DEMO_PROXIES);
+  const [proxies, setProxies] = useState<Proxy[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ProxyConfig>(defaultProxyConfig);
   const [assignProfileId, setAssignProfileId] = useState('');
   const [assigningProxyId, setAssigningProxyId] = useState<string | null>(null);
+  const [checkingIds, setCheckingIds] = useState<Set<string>>(new Set());
+
+  const loadProxies = useCallback(async () => {
+    if (!api) return;
+    try {
+      setError(null);
+      const list = await api.listProxies();
+      // Map DB snake_case rows to camelCase Proxy type
+      const mapped: Proxy[] = (list as Array<Record<string, unknown>>).map((row) => ({
+        id: row.id as string,
+        protocol: (row.protocol as Proxy['protocol']),
+        host: row.host as string,
+        port: row.port as number,
+        username: (row.username as string) || undefined,
+        password: (row.password as string) || undefined,
+        status: (row.status as Proxy['status']) || null,
+        responseTimeMs: (row.responseTimeMs ?? row.response_time_ms ?? null) as number | null,
+        lastCheckedAt: (row.lastCheckedAt ?? row.last_checked_at ?? null) as string | null,
+      }));
+      setProxies(mapped);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load proxies');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadProxies(); }, [loadProxies]);
+
+  // Auto-refresh every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => { loadProxies(); }, 5000);
+    return () => clearInterval(interval);
+  }, [loadProxies]);
 
   const handleCreate = () => {
     setEditingId(null);
@@ -56,54 +71,139 @@ export default function ProxiesPage() {
     setShowForm(true);
   };
 
-  const handleSave = () => {
-    if (!formData.host.trim()) return;
+  const [saveChecking, setSaveChecking] = useState(false);
+  const [saveCheckResult, setSaveCheckResult] = useState<{ status: string; message: string } | null>(null);
 
-    if (editingId) {
-      // TODO: IPC call — window.electronAPI.updateProxy(editingId, formData)
+  const handleSave = async () => {
+    if (!formData.host.trim()) return;
+    if (!api) return;
+
+    // Check proxy live before saving
+    setSaveChecking(true);
+    setSaveCheckResult(null);
+    try {
+      const result = await api.checkProxyDirect(formData);
+      if (!result.success) {
+        setSaveCheckResult({
+          status: 'error',
+          message: `❌ Proxy is dead! Cannot save.\n${result.error || 'Connection failed'}\nResponse: ${result.responseTimeMs}ms`,
+        });
+        setSaveChecking(false);
+        return;
+      }
+      setSaveCheckResult({
+        status: 'success',
+        message: `✅ Proxy alive! IP: ${result.ip || 'Unknown'}${result.country ? ` | ${result.country}` : ''}${result.city ? ` / ${result.city}` : ''} | ${result.responseTimeMs}ms`,
+      });
+    } catch (err: unknown) {
+      setSaveCheckResult({
+        status: 'error',
+        message: `❌ Check failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      });
+      setSaveChecking(false);
+      return;
+    }
+    setSaveChecking(false);
+
+    // Proxy is alive — save it
+    try {
+      if (editingId) {
+        await api.removeProxy(editingId);
+        await api.addProxy(formData);
+      } else {
+        await api.addProxy(formData);
+      }
+      await loadProxies();
+      setShowForm(false);
+      setSaveCheckResult(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save proxy');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!api) return;
+    try {
+      await api.removeProxy(id);
+      await loadProxies();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete proxy');
+    }
+  };
+
+  const handleCheck = async (id: string) => {
+    if (!api) return;
+    setCheckingIds((prev) => new Set(prev).add(id));
+    try {
+      // Find proxy config for direct check with geo info
+      const proxy = proxies.find((p) => p.id === id);
+      if (proxy) {
+        const result = await api.checkProxyDirect({
+          protocol: proxy.protocol,
+          host: proxy.host,
+          port: proxy.port,
+          username: proxy.username,
+          password: proxy.password,
+        });
+        setProxies((prev) =>
+          prev.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  status: result.success ? 'alive' as const : 'dead' as const,
+                  responseTimeMs: result.responseTimeMs,
+                  lastCheckedAt: new Date().toISOString(),
+                }
+              : p,
+          ),
+        );
+        // Also update in DB
+        try {
+          await api.updateProxyStatus(id, result.success ? 'alive' : 'dead', result.responseTimeMs);
+        } catch { /* ignore */ }
+        if (result.success) {
+          alert(`✅ Proxy alive!\nIP: ${result.ip || 'Unknown'}${result.country ? `\nCountry: ${result.country}` : ''}${result.region ? `\nRegion: ${result.region}` : ''}${result.city ? `\nCity: ${result.city}` : ''}\nResponse: ${result.responseTimeMs}ms`);
+        } else {
+          alert(`❌ Proxy dead!\n${result.error || 'Connection failed'}\nResponse: ${result.responseTimeMs}ms`);
+        }
+      }
+    } catch (err: unknown) {
       setProxies((prev) =>
         prev.map((p) =>
-          p.id === editingId
-            ? { ...p, protocol: formData.protocol, host: formData.host, port: formData.port, username: formData.username, password: formData.password }
+          p.id === id
+            ? { ...p, status: 'dead' as const, lastCheckedAt: new Date().toISOString() }
             : p,
         ),
       );
-    } else {
-      // TODO: IPC call — window.electronAPI.addProxy(formData)
-      const newProxy: Proxy = {
-        id: `proxy-${Date.now()}`,
-        ...formData,
-        status: null,
-        responseTimeMs: null,
-        lastCheckedAt: null,
-      };
-      setProxies((prev) => [...prev, newProxy]);
+    } finally {
+      setCheckingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
-    setShowForm(false);
   };
 
-  const handleDelete = (id: string) => {
-    // TODO: IPC call — window.electronAPI.removeProxy(id)
-    setProxies((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  const handleCheck = (id: string) => {
-    // TODO: IPC call — window.electronAPI.checkProxy(id)
-    setProxies((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, status: 'alive' as const, responseTimeMs: Math.floor(Math.random() * 300) + 50, lastCheckedAt: new Date().toISOString() }
-          : p,
-      ),
-    );
-  };
-
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!assigningProxyId || !assignProfileId.trim()) return;
-    // TODO: IPC call — window.electronAPI.assignProxyToProfile(assigningProxyId, assignProfileId)
-    setAssigningProxyId(null);
-    setAssignProfileId('');
+    if (!api) return;
+    try {
+      await api.assignProxy(assigningProxyId, assignProfileId.trim());
+      setAssigningProxyId(null);
+      setAssignProfileId('');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to assign proxy');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="page">
+        <h2>Quản lý Proxy</h2>
+        <div className="empty-state"><p>Đang tải...</p></div>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -111,6 +211,13 @@ export default function ProxiesPage() {
         <h2>Quản lý Proxy</h2>
         <button className="btn btn-primary" onClick={handleCreate}>+ Thêm Proxy</button>
       </div>
+
+      {error && (
+        <div style={{ color: '#ef4444', marginBottom: 12, fontSize: 13 }}>
+          ⚠ {error}
+          <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
 
       {proxies.length === 0 ? (
         <div className="empty-state">
@@ -149,7 +256,13 @@ export default function ProxiesPage() {
                   <td>{proxy.lastCheckedAt ? new Date(proxy.lastCheckedAt).toLocaleString() : '—'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.25rem' }}>
-                      <button className="btn btn-sm" onClick={() => handleCheck(proxy.id)}>Kiểm tra</button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleCheck(proxy.id)}
+                        disabled={checkingIds.has(proxy.id)}
+                      >
+                        {checkingIds.has(proxy.id) ? '...' : 'Kiểm tra'}
+                      </button>
                       <button className="btn btn-sm" onClick={() => { setAssigningProxyId(proxy.id); setAssignProfileId(''); }}>Gán</button>
                       <button className="btn btn-sm" onClick={() => handleEdit(proxy)}>Sửa</button>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDelete(proxy.id)}>Xóa</button>
@@ -218,9 +331,16 @@ export default function ProxiesPage() {
                 />
               </div>
             </div>
+            {saveCheckResult && (
+              <div className={`proxy-check-result ${saveCheckResult.status}`} style={{ marginBottom: 12 }}>
+                {saveCheckResult.message}
+              </div>
+            )}
             <div className="form-actions">
-              <button className="btn btn-primary" onClick={handleSave}>Lưu</button>
-              <button className="btn" onClick={() => setShowForm(false)}>Hủy</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saveChecking}>
+                {saveChecking ? '⏳ Checking...' : 'Lưu'}
+              </button>
+              <button className="btn" onClick={() => { setShowForm(false); setSaveCheckResult(null); }}>Hủy</button>
             </div>
           </div>
         </div>

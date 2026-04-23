@@ -1,81 +1,100 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Extension } from '@shared/types';
 
-const DEMO_EXTENSIONS: Extension[] = [
-  {
-    id: 'ext-1',
-    name: 'uBlock Origin',
-    version: '1.55.0',
-    source: 'store',
-    assignedProfiles: ['p-1', 'p-2'],
-  },
-  {
-    id: 'ext-2',
-    name: 'Cookie Editor',
-    version: '1.12.1',
-    source: 'upload',
-    assignedProfiles: ['p-1'],
-  },
-];
+const api = typeof window !== 'undefined' ? window.electronAPI : null;
 
 export default function ExtensionsPage() {
-  const [extensions, setExtensions] = useState<Extension[]>(DEMO_EXTENSIONS);
+  const [extensions, setExtensions] = useState<Extension[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [showStoreForm, setShowStoreForm] = useState(false);
   const [storeUrl, setStoreUrl] = useState('');
-  const [uploadName, setUploadName] = useState('');
   const [assignExtId, setAssignExtId] = useState<string | null>(null);
   const [assignProfileIds, setAssignProfileIds] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = () => {
-    if (!uploadName.trim()) return;
-    // TODO: IPC call — window.electronAPI.uploadExtension(fileBuffer, filename)
-    const newExt: Extension = {
-      id: `ext-${Date.now()}`,
-      name: uploadName,
-      version: '1.0.0',
-      source: 'upload',
-      assignedProfiles: [],
-    };
-    setExtensions((prev) => [...prev, newExt]);
-    setUploadName('');
-    setShowUploadForm(false);
+  const loadExtensions = useCallback(async () => {
+    if (!api) return;
+    try {
+      setError(null);
+      const list = await api.listExtensions();
+      setExtensions(list);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load extensions');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadExtensions(); }, [loadExtensions]);
+
+  const handleUpload = async () => {
+    if (!api) return;
+    const fileInput = fileInputRef.current;
+    if (!fileInput?.files?.length) {
+      setError('Please select a .zip file');
+      return;
+    }
+
+    const file = fileInput.files[0];
+    setUploading(true);
+    setError(null);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const fileData = Array.from(new Uint8Array(arrayBuffer));
+      await api.uploadExtension(fileData, file.name);
+      await loadExtensions();
+      setShowUploadForm(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to upload extension');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleDownloadFromStore = () => {
     if (!storeUrl.trim()) return;
-    // TODO: IPC call — window.electronAPI.downloadFromStore(storeUrl)
-    const newExt: Extension = {
-      id: `ext-${Date.now()}`,
-      name: `Store Extension (${storeUrl.slice(-10)})`,
-      version: '1.0.0',
-      source: 'store',
-      assignedProfiles: [],
-    };
-    setExtensions((prev) => [...prev, newExt]);
-    setStoreUrl('');
+    // Store download is not yet implemented in backend — show info
+    setError('Chrome Store download is not yet supported. Please upload a .zip file instead.');
     setShowStoreForm(false);
+    setStoreUrl('');
   };
 
-  const handleRemove = (id: string) => {
-    // TODO: IPC call — window.electronAPI.removeExtension(id)
-    setExtensions((prev) => prev.filter((e) => e.id !== id));
+  const handleRemove = async (id: string) => {
+    if (!api) return;
+    try {
+      await api.removeExtension(id);
+      await loadExtensions();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to remove extension');
+    }
   };
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     if (!assignExtId || !assignProfileIds.trim()) return;
+    if (!api) return;
     const profileIds = assignProfileIds.split(',').map((s) => s.trim()).filter(Boolean);
-    // TODO: IPC call — window.electronAPI.assignExtensionToProfiles(assignExtId, profileIds)
-    setExtensions((prev) =>
-      prev.map((ext) =>
-        ext.id === assignExtId
-          ? { ...ext, assignedProfiles: [...new Set([...ext.assignedProfiles, ...profileIds])] }
-          : ext,
-      ),
-    );
-    setAssignExtId(null);
-    setAssignProfileIds('');
+    try {
+      await api.assignExtension(assignExtId, profileIds);
+      await loadExtensions();
+      setAssignExtId(null);
+      setAssignProfileIds('');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to assign extension');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="page">
+        <h2>Quản lý Tiện ích mở rộng</h2>
+        <div className="empty-state"><p>Đang tải...</p></div>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -86,6 +105,13 @@ export default function ExtensionsPage() {
           <button className="btn" onClick={() => setShowStoreForm(true)}>Tải từ Chrome Store</button>
         </div>
       </div>
+
+      {error && (
+        <div style={{ color: '#ef4444', marginBottom: 12, fontSize: 13 }}>
+          ⚠ {error}
+          <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
 
       {extensions.length === 0 ? (
         <div className="empty-state">
@@ -141,20 +167,13 @@ export default function ExtensionsPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Tải lên tiện ích (.zip)</h3>
             <div className="form-group">
-              <label htmlFor="ext-name">Tên tiện ích</label>
-              <input
-                id="ext-name"
-                value={uploadName}
-                onChange={(e) => setUploadName(e.target.value)}
-                placeholder="Nhập tên tiện ích..."
-              />
-            </div>
-            <div className="form-group">
               <label htmlFor="ext-file">File .zip</label>
-              <input id="ext-file" type="file" accept=".zip" />
+              <input id="ext-file" type="file" accept=".zip" ref={fileInputRef} />
             </div>
             <div className="form-actions">
-              <button className="btn btn-primary" onClick={handleUpload}>Tải lên</button>
+              <button className="btn btn-primary" onClick={handleUpload} disabled={uploading}>
+                {uploading ? 'Đang tải...' : 'Tải lên'}
+              </button>
               <button className="btn" onClick={() => setShowUploadForm(false)}>Hủy</button>
             </div>
           </div>

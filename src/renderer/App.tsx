@@ -10,6 +10,7 @@ import ActionLogsPage from './pages/ActionLogsPage';
 import ExtensionsPage from './pages/ExtensionsPage';
 import CloudSyncPage from './pages/CloudSyncPage';
 import IPRotationPage from './pages/IPRotationPage';
+import TrashPage from './pages/TrashPage';
 
 type PageId =
   | 'profiles'
@@ -77,6 +78,8 @@ function App() {
         return <FingerprintConfigForm />;
       case 'proxies':
         return <ProxiesPage />;
+      case 'trash':
+        return <TrashPage />;
       case 'rpa':
       case 'rpa-plus':
         return <RPAEditorPage />;
