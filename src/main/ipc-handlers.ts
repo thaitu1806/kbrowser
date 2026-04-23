@@ -110,7 +110,7 @@ export function setupIPC(): { profileManager: ProfileManager } {
     try {
       const { execSync } = require('child_process');
       // Try to install chromium if not present
-      execSync('npx playwright install chromium', {
+      execSync('npx playwright install chromium firefox', {
         stdio: 'pipe',
         cwd: path.join(__dirname, '..', '..'),
         timeout: 300000, // 5 minutes max
