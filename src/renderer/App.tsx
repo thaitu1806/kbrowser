@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ProfilesPage from './pages/ProfilesPage';
+import GroupsPage from './pages/GroupsPage';
 import NewProfileForm from './pages/NewProfileForm';
 import FingerprintConfigForm from './pages/FingerprintConfigForm';
 import ProxiesPage from './pages/ProxiesPage';
@@ -65,6 +66,8 @@ function App() {
           onSave={() => { setEditProfileId(null); setActivePage('profiles'); }}
           onCancel={() => { setEditProfileId(null); setActivePage('profiles'); }}
         />;
+      case 'groups':
+        return <GroupsPage />;
       case 'fingerprint':
         return <FingerprintConfigForm />;
       case 'proxies':

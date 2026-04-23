@@ -972,6 +972,31 @@ tr:hover { background: #f8faff; }
   padding: 20px 24px;
 }
 
+.npf-content-wrapper {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.npf-content-wrapper > .npf-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.npf-overview-sticky {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  padding: 16px;
+  background: #fafbfd;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: calc(100vh - 120px);
+}
+
 .npf-section {
   max-width: 900px;
   padding-top: 8px;
@@ -1805,4 +1830,17 @@ tr:hover { background: #f8faff; }
   height: 1px;
   background: var(--border-light);
   margin: 4px 0;
+}
+
+
+/* ─── Group link in profile table ─── */
+.group-link {
+  cursor: pointer;
+  color: var(--primary);
+  transition: color 0.12s;
+}
+
+.group-link:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
 }

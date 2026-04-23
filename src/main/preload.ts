@@ -21,6 +21,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getProfileCookies: (id: string) => ipcRenderer.invoke('profile:getCookies', id),
   getProfileTabs: (id: string) => ipcRenderer.invoke('profile:getTabs', id),
   saveProfileCookies: (id: string, cookieJson: string) => ipcRenderer.invoke('profile:saveCookies', id, cookieJson),
+  saveExtendedData: (id: string, data: string) => ipcRenderer.invoke('profile:saveExtendedData', id, data),
+  getExtendedData: (id: string) => ipcRenderer.invoke('profile:getExtendedData', id),
+
+  // ─── Groups ───
+  listGroups: () => ipcRenderer.invoke('group:list'),
+  createGroup: (name: string, remark?: string) => ipcRenderer.invoke('group:create', name, remark),
+  deleteGroup: (id: string) => ipcRenderer.invoke('group:delete', id),
+  renameGroup: (id: string, name: string) => ipcRenderer.invoke('group:rename', id, name),
 
   // ─── Proxies ───
   listProxies: () => ipcRenderer.invoke('proxy:list'),

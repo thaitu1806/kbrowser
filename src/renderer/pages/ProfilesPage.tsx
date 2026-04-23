@@ -26,6 +26,8 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
   const [groupFilter, setGroupFilter] = useState('All groups');
   const [openingId, setOpeningId] = useState<string | null>(null);
   const [openStatus, setOpenStatus] = useState<string | null>(null);
+  const [profileGroups, setProfileGroups] = useState<Record<string, string>>({});
+  const [groups, setGroups] = useState<Array<{id: string; name: string}>>([]);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<ProfileConfig>({
     name: '', browserType: 'chromium', fingerprint: defaultFingerprint,
@@ -39,6 +41,23 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
       if (api) {
         const list = await api.listProfiles();
         setProfiles(list);
+        // Load group for each profile
+        const groupMap: Record<string, string> = {};
+        for (const p of list) {
+          try {
+            const ext = await api.getExtendedData(p.id);
+            if (ext) {
+              const data = JSON.parse(ext);
+              if (data.group) groupMap[p.id] = data.group;
+            }
+          } catch { /* ignore */ }
+        }
+        setProfileGroups(groupMap);
+        // Load groups list
+        try {
+          const grps = await api.listGroups();
+          setGroups(grps);
+        } catch { /* ignore */ }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load profiles');
@@ -62,9 +81,14 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
     return () => clearInterval(interval);
   }, [loadProfiles]);
 
-  const filteredProfiles = profiles.filter((p) =>
-    searchQuery ? p.name.toLowerCase().includes(searchQuery.toLowerCase()) : true,
-  );
+  const filteredProfiles = profiles.filter((p) => {
+    if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (groupFilter !== 'All groups') {
+      const profileGroup = profileGroups[p.id] || 'Ungrouped';
+      if (profileGroup !== groupFilter) return false;
+    }
+    return true;
+  });
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -215,6 +239,9 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
           <select className="group-select" value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)}>
             <option>All groups</option>
             <option>Ungrouped</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.name}>{g.name}</option>
+            ))}
           </select>
           <div className="search-box">
             <span className="search-icon">🔍</span>
@@ -301,7 +328,12 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
                   />
                 </td>
                 <td className="col-group">
-                  <span className="group-label">Ungrouped</span>
+                  <span
+                    className="group-label group-link"
+                    onClick={() => setGroupFilter(profileGroups[profile.id] || 'Ungrouped')}
+                  >
+                    {profileGroups[profile.id] || 'Ungrouped'}
+                  </span>
                 </td>
                 <td className="col-name">
                   <div className="profile-name-cell">

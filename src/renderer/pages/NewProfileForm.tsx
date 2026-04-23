@@ -213,12 +213,22 @@ interface NewProfileFormProps {
   onCancel?: () => void;
 }
 
+const WEBGL_RENDERERS = [
+  'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0)',
+  'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)',
+  'ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0)',
+  'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)',
+  'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0)',
+  'ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0)',
+];
+
 export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewProfileFormProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [form, setForm] = useState<ProfileFormData>(defaultForm);
   const [proxyCheckResult, setProxyCheckResult] = useState<{ status: string; message: string } | null>(null);
   const [proxyChecking, setProxyChecking] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
+  const [groups, setGroups] = useState<Array<{id: string; name: string}>>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({
     general: null, proxy: null, platform: null, fingerprint: null, advanced: null,
@@ -304,9 +314,31 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           }
         }
       } catch { /* ignore */ }
+      // Load extended data
+      try {
+        const extData = await api.getExtendedData(editProfileId);
+        if (extData) {
+          const ext = JSON.parse(extData);
+          setForm((prev) => ({ ...prev, ...ext }));
+        }
+      } catch { /* ignore */ }
     };
     loadProfile();
   }, [editProfileId]);
+
+  // Load groups from backend
+  useEffect(() => {
+    const loadGroups = async () => {
+      const api = typeof window !== 'undefined' ? window.electronAPI : null;
+      if (api?.listGroups) {
+        try {
+          const list = await api.listGroups();
+          setGroups(list);
+        } catch { /* ignore */ }
+      }
+    };
+    loadGroups();
+  }, []);
 
   const update = <K extends keyof ProfileFormData>(key: K, value: ProfileFormData[K]) => {
     setForm((prev) => {
@@ -430,8 +462,10 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
       };
 
       if (api) {
+        let profileId: string | undefined;
         if (isEdit && editProfileId) {
           await api.updateProfile(editProfileId, config);
+          profileId = editProfileId;
           // Also update proxy if changed
           if (config.proxy && config.proxy.host) {
             const proxy = await api.addProxy(config.proxy);
@@ -439,11 +473,46 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           }
         } else {
           const profile = await api.createProfile(config);
+          profileId = profile.id;
           // Assign proxy if configured
           if (config.proxy && config.proxy.host) {
             const proxy = await api.addProxy(config.proxy);
             await api.assignProxy(proxy.id, profile.id);
           }
+        }
+        // Save extended data (fields not in ProfileConfig)
+        if (profileId) {
+          const extendedData = {
+            remark: form.remark,
+            ipChecker: form.ipChecker,
+            timezone: form.timezone,
+            location: form.location,
+            locationAsk: form.locationAsk,
+            language: form.language,
+            displayLanguage: form.displayLanguage,
+            screenResolution: form.screenResolution,
+            fonts: form.fonts,
+            webglMeta: form.webglMeta,
+            webglVendor: form.webglVendor,
+            webglRenderer: form.webglRenderer,
+            webgpu: form.webgpu,
+            deviceNameMode: form.deviceNameMode,
+            deviceName: form.deviceName,
+            macAddressMode: form.macAddressMode,
+            macAddress: form.macAddress,
+            doNotTrack: form.doNotTrack,
+            extensionMode: form.extensionMode,
+            dataSync: form.dataSync,
+            browserSettings: form.browserSettings,
+            randomFingerprint: form.randomFingerprint,
+            group: form.group,
+            tags: form.tags,
+          };
+          await api.saveExtendedData(profileId, JSON.stringify(extendedData));
+        }
+        // Save cookies if provided
+        if (profileId && form.cookie) {
+          await api.saveProfileCookies(profileId, form.cookie);
         }
       }
       onSave?.(form);
@@ -469,8 +538,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         ))}
       </div>
 
-      {/* Tab Content — all sections visible, scrollable */}
-      <div className="npf-content" ref={contentRef}>
+      {/* Tab Content — two-column layout: form left, overview right */}
+      <div className="npf-content-wrapper">
+        <div className="npf-content" ref={contentRef}>
 
         {/* ═══ GENERAL ═══ */}
         <div className="npf-section" ref={(el) => { sectionRefs.current.general = el; }} id="section-general">
@@ -560,7 +630,14 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   onChange={(e) => setForm((prev) => ({ ...prev, userAgent: e.target.value }))}
                   className="ua-input"
                 />
-                <button className="icon-btn" title="Save">💾</button>
+                <button className="icon-btn" title="Save" onClick={() => {
+                  const saved = JSON.parse(localStorage.getItem('savedUAs') || '[]');
+                  if (!saved.includes(form.userAgent)) {
+                    saved.push(form.userAgent);
+                    localStorage.setItem('savedUAs', JSON.stringify(saved));
+                  }
+                  alert('User-Agent saved!');
+                }}>💾</button>
                 <button className="icon-btn" title="Random" onClick={handleRandomUA}>🔀</button>
               </div>
             </FormRow>
@@ -572,12 +649,26 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   onChange={(e) => update('group', e.target.value)}
                   className="group-select-field"
                 >
-                  <option>Ungrouped</option>
-                  <option>Group 1</option>
-                  <option>Group 2</option>
+                  <option value="Ungrouped">Ungrouped</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.name}>{g.name}</option>
+                  ))}
                 </select>
-                <button className="tags-btn">🏷️ Tags</button>
+                <button className="tags-btn" onClick={() => {
+                  const tag = prompt('Enter tag name:');
+                  if (tag) update('tags', [...form.tags, tag]);
+                }}>🏷️ Tags{form.tags.length > 0 ? ` (${form.tags.length})` : ''}</button>
               </div>
+              {form.tags.length > 0 && (
+                <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {form.tags.map((tag, i) => (
+                    <span key={i} style={{ background: '#eef2ff', color: '#4a6cf7', padding: '2px 8px', borderRadius: 4, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      {tag}
+                      <span style={{ cursor: 'pointer', fontWeight: 'bold' }} onClick={() => update('tags', form.tags.filter((_, idx) => idx !== i))}>×</span>
+                    </span>
+                  ))}
+                </div>
+              )}
             </FormRow>
 
             <FormRow label="Cookie">
@@ -586,7 +677,13 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 onChange={(e) => update('cookie', e.target.value)}
                 placeholder="Formats: JSON, Netscape, Name=Value"
               />
-              <div className="merge-cookie">⊕ Merge cookie</div>
+              <div className="merge-cookie" onClick={() => {
+                const newCookie = prompt('Enter cookie to merge:');
+                if (newCookie) {
+                  const merged = form.cookie ? form.cookie + '\n' + newCookie : newCookie;
+                  update('cookie', merged);
+                }
+              }}>⊕ Merge cookie</div>
             </FormRow>
 
             <FormRow label="Remark">
@@ -685,7 +782,20 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 <div className="section-label">Platform</div>
 
                 <FormRow label="Platform">
-                  <button className="add-platform-btn">⊕ Add Platform Account</button>
+                  <button className="add-platform-btn" onClick={() => {
+                    const account = prompt('Enter platform account URL or name:');
+                    if (account) update('platformAccounts', [...form.platformAccounts, account]);
+                  }}>⊕ Add Platform Account</button>
+                  {form.platformAccounts.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      {form.platformAccounts.map((acc, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#1e2a3a', marginBottom: 4 }}>
+                          <span>{acc}</span>
+                          <span style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => update('platformAccounts', form.platformAccounts.filter((_, idx) => idx !== i))}>✕</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </FormRow>
 
                 <FormRow label="Tabs">
@@ -697,27 +807,6 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   />
                 </FormRow>
               </div>
-
-              {/* Overview Panel */}
-              <div className="npf-col-overview">
-                <div className="overview-header">
-                  <span className="overview-title">Overview</span>
-                  <button className="new-fp-btn">🔄 New fingerprint</button>
-                </div>
-                <div className="overview-table">
-                  <OverviewRow label="Browser" value={`${form.browser === 'chromium' ? 'SunBrowser' : 'FlowerBrowser'} [${form.browserVersion}]`} />
-                  <OverviewRow label="User-Agent" value={form.userAgent} />
-                  <OverviewRow label="WebRTC" value={form.webrtc === 'disabled' ? 'Disabled' : form.webrtc} />
-                  <OverviewRow label="Timezone" value="Based on IP" />
-                  <OverviewRow label="Location" value="[Ask] Based on IP" />
-                  <OverviewRow label="Language" value="Based on IP" />
-                  <OverviewRow label="Display language" value="Based on Language" />
-                  <OverviewRow label="Screen Resolution" value="Based on User-Agent" />
-                </div>
-                <div className="overview-footer">
-                  Set default values in <a href="#">Preferences</a>.
-                </div>
-              </div>
             </div>
           </div>
 
@@ -725,7 +814,20 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         <div className="npf-section" ref={(el) => { sectionRefs.current.platform = el; }} id="section-platform">
             <div className="section-label">Platform</div>
             <FormRow label="Platform">
-              <button className="add-platform-btn">⊕ Add Platform Account</button>
+              <button className="add-platform-btn" onClick={() => {
+                const account = prompt('Enter platform account URL or name:');
+                if (account) update('platformAccounts', [...form.platformAccounts, account]);
+              }}>⊕ Add Platform Account</button>
+              {form.platformAccounts.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  {form.platformAccounts.map((acc, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#1e2a3a', marginBottom: 4 }}>
+                      <span>{acc}</span>
+                      <span style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => update('platformAccounts', form.platformAccounts.filter((_, idx) => idx !== i))}>✕</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </FormRow>
             <FormRow label="Tabs">
               <textarea
@@ -807,7 +909,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 <SwitchToggle label="WebGL Image" checked={form.webglNoise} onChange={(v) => update('webglNoise', v)} />
                 <SwitchToggle label="AudioContext" checked={form.audioNoise} onChange={(v) => update('audioNoise', v)} />
                 <SwitchToggle label="Media device [Auto]" checked={form.mediaDevice} onChange={(v) => update('mediaDevice', v)} />
-                <span className="edit-link">Edit</span>
+                <span className="edit-link" onClick={() => scrollToSection('fingerprint')}>Edit</span>
               </div>
               <div className="switch-row" style={{ marginTop: 8 }}>
                 <SwitchToggle label="ClientRects" checked={form.clientRects} onChange={(v) => update('clientRects', v)} />
@@ -834,7 +936,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                     <label>Renderer</label>
                     <div className="renderer-row">
                       <input value={form.webglRenderer} onChange={(e) => update('webglRenderer', e.target.value)} />
-                      <button className="icon-btn" title="Random">🔀</button>
+                      <button className="icon-btn" title="Random" onClick={() => {
+                        update('webglRenderer', WEBGL_RENDERERS[Math.floor(Math.random() * WEBGL_RENDERERS.length)]);
+                      }}>🔀</button>
                     </div>
                   </div>
                 </div>
@@ -918,6 +1022,47 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             </FormRow>
           </div>
 
+        </div>
+
+        {/* Overview Panel — sticky right column */}
+        <div className="npf-overview-sticky">
+          <div className="overview-header">
+            <span className="overview-title">Overview</span>
+            <button className="new-fp-btn" onClick={() => {
+              update('canvasNoise', Math.random() > 0.5);
+              update('webglNoise', Math.random() > 0.5);
+              update('audioNoise', Math.random() > 0.5);
+              update('cpuCores', [2, 4, 6, 8, 12, 16][Math.floor(Math.random() * 6)]);
+              update('ramSize', [4, 8, 16, 32][Math.floor(Math.random() * 4)]);
+              handleRandomUA();
+              update('deviceName', `DESKTOP-${Math.random().toString(36).slice(2, 10).toUpperCase()}`);
+              const hex = () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase();
+              update('macAddress', `${hex()}-${hex()}-${hex()}-${hex()}-${hex()}-${hex()}`);
+            }}>🔄 New fingerprint</button>
+          </div>
+          <div className="overview-table">
+            <OverviewRow label="Browser" value={`${form.browser === 'chromium' ? 'SunBrowser' : 'FlowerBrowser'} [${form.browserVersion}]`} />
+            <OverviewRow label="User-Agent" value={form.userAgent} />
+            <OverviewRow label="WebRTC" value={form.webrtc === 'disabled' ? 'Disabled' : form.webrtc === 'disable-udp' ? 'Disable UDP' : form.webrtc.charAt(0).toUpperCase() + form.webrtc.slice(1)} />
+            <OverviewRow label="Timezone" value={form.timezone === 'based-on-ip' ? 'Based on IP' : form.timezone === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="Location" value={`${form.locationAsk ? '[Ask]' : '[Allow]'} ${form.location === 'based-on-ip' ? 'Based on IP' : form.location === 'custom' ? 'Custom' : 'Block'}`} />
+            <OverviewRow label="Language" value={form.language === 'based-on-ip' ? 'Based on IP' : form.language === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="Display language" value={form.displayLanguage === 'based-on-language' ? 'Based on Language' : form.displayLanguage === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="Screen Resolution" value={form.screenResolution === 'based-on-ua' ? 'Based on User-Agent' : form.screenResolution === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="Fonts" value={form.fonts === 'default' ? 'Default' : 'Custom'} />
+            <OverviewRow label="Canvas" value={form.canvasNoise ? 'Noise' : 'Real'} />
+            <OverviewRow label="WebGL" value={form.webglNoise ? 'Noise' : 'Real'} />
+            <OverviewRow label="Audio" value={form.audioNoise ? 'Noise' : 'Real'} />
+            <OverviewRow label="CPU" value={`${form.cpuCores} cores`} />
+            <OverviewRow label="RAM" value={`${form.ramSize} GB`} />
+            <OverviewRow label="WebGL Meta" value={form.webglMeta === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="WebGPU" value={form.webgpu === 'based-on-webgl' ? 'Based on WebGL' : form.webgpu === 'real' ? 'Real' : 'Disabled'} />
+            <OverviewRow label="Do Not Track" value={form.doNotTrack === 'default' ? 'Default' : form.doNotTrack === 'open' ? 'Open' : 'Close'} />
+          </div>
+          <div className="overview-footer">
+            Set default values in <a href="#">Preferences</a>.
+          </div>
+        </div>
       </div>
 
       {/* Footer */}

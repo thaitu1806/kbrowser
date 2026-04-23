@@ -23,6 +23,14 @@ interface ElectronAPI {
   getProfileCookies(id: string): Promise<string>;
   getProfileTabs(id: string): Promise<string>;
   saveProfileCookies(id: string, cookieJson: string): Promise<void>;
+  saveExtendedData(id: string, data: string): Promise<void>;
+  getExtendedData(id: string): Promise<string | null>;
+
+  // Groups
+  listGroups(): Promise<Array<{ id: string; name: string; remark: string | null; created_at: string }>>;
+  createGroup(name: string, remark?: string): Promise<{ id: string; name: string }>;
+  deleteGroup(id: string): Promise<void>;
+  renameGroup(id: string, name: string): Promise<void>;
 
   // Proxies
   listProxies(): Promise<Proxy[]>;

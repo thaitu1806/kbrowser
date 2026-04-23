@@ -178,6 +178,51 @@ export function setupIPC(): { profileManager: ProfileManager } {
     }
   });
 
+  // ─── Extended Profile Data handlers ───
+  ipcMain.handle('profile:saveExtendedData', async (_event, profileId: string, data: string) => {
+    const now = new Date().toISOString();
+    const existing = db.prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')
+      .get(profileId, 'localstorage') as { id: string } | undefined;
+    if (existing) {
+      db.prepare('UPDATE profile_data SET data = ?, updated_at = ? WHERE id = ?')
+        .run(Buffer.from(data), now, existing.id);
+    } else {
+      const crypto = require('crypto');
+      db.prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(crypto.randomUUID(), profileId, 'localstorage', Buffer.from(data), now);
+    }
+  });
+
+  ipcMain.handle('profile:getExtendedData', async (_event, profileId: string) => {
+    const row = db.prepare('SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?')
+      .get(profileId, 'localstorage') as { data: Buffer | null } | undefined;
+    if (!row || !row.data) return null;
+    return row.data.toString('utf-8');
+  });
+
+  // ─── Group handlers ───
+  ipcMain.handle('group:list', async () => {
+    return db.prepare('SELECT * FROM groups ORDER BY name').all();
+  });
+
+  ipcMain.handle('group:create', async (_event, name: string, remark?: string) => {
+    const crypto = require('crypto');
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO groups (id, name, remark, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(id, name, remark || null, now, now);
+    return { id, name, remark: remark || null, created_at: now, updated_at: now };
+  });
+
+  ipcMain.handle('group:delete', async (_event, groupId: string) => {
+    db.prepare('DELETE FROM groups WHERE id = ?').run(groupId);
+  });
+
+  ipcMain.handle('group:rename', async (_event, groupId: string, name: string) => {
+    const now = new Date().toISOString();
+    db.prepare('UPDATE groups SET name = ?, updated_at = ? WHERE id = ?').run(name, now, groupId);
+  });
+
   // ─── Proxy handlers ───
   ipcMain.handle('proxy:list', async () => {
     const rows = db.prepare('SELECT * FROM proxies').all();

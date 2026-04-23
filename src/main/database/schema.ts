@@ -137,4 +137,16 @@ CREATE INDEX IF NOT EXISTS idx_rpa_scripts_is_template ON rpa_scripts(is_templat
 CREATE INDEX IF NOT EXISTS idx_action_logs_user_id ON action_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_action_logs_timestamp ON action_logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_action_logs_profile_id ON action_logs(profile_id);
+
+-- Groups table: profile groups for organization
+CREATE TABLE IF NOT EXISTS groups (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  remark TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+-- Add group_id to profiles if not exists (migration-safe)
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we use a pragma check
 `;
