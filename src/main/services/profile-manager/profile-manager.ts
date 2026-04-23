@@ -320,8 +320,17 @@ export class ProfileManager {
       }
     };
 
-    // Auto-save cookies every 30 seconds while browser is open
-    const cookieInterval = setInterval(saveCookies, 30000);
+    // Auto-save cookies every 5 seconds while browser is open
+    const cookieInterval = setInterval(saveCookies, 5000);
+
+    // Also save cookies when any page navigates (captures login cookies immediately)
+    context.on('page', (page) => {
+      page.on('load', () => { saveCookies(); });
+    });
+    // Save for existing pages too
+    for (const page of context.pages()) {
+      page.on('load', () => { saveCookies(); });
+    }
 
     // Listen for browser close event (user closes the window)
     context.on('close', () => {
