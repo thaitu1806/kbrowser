@@ -85,8 +85,21 @@ export default function ProfilesPage({ onNewProfile, onEditProfile }: { onNewPro
   const handleOpen = async (id: string) => {
     try {
       setOpeningId(id);
-      setOpenStatus('Starting browser...');
+      setOpenStatus('Checking proxy...');
       if (api) {
+        // Check proxy before opening
+        const validation = await api.validateProxy(id);
+        if (validation.status === 'dead') {
+          const proceed = confirm(
+            `⚠️ Proxy is not responding!\n\n${validation.message}\n\nOpen without proxy?`
+          );
+          if (!proceed) {
+            setOpeningId(null);
+            setOpenStatus(null);
+            return;
+          }
+        }
+        setOpenStatus('Starting browser...');
         await api.openProfile(id);
         await loadProfiles();
       }

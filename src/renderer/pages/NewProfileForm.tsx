@@ -366,9 +366,34 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
     }
   };
 
+  const [saving, setSaving] = useState(false);
+
   const handleSave = async () => {
     const api = typeof window !== 'undefined' ? window.electronAPI : null;
+    setSaving(true);
     try {
+      // Check proxy before saving if proxy is configured
+      if (form.proxyType !== 'none' && form.proxyHost && form.proxyPort && api) {
+        setProxyCheckResult(null);
+        const result = await api.checkProxyDirect({
+          protocol: form.proxyType as 'http' | 'https' | 'socks5',
+          host: form.proxyHost,
+          port: parseInt(form.proxyPort) || 0,
+          username: form.proxyUser || undefined,
+          password: form.proxyPass || undefined,
+        });
+        if (!result.success) {
+          setProxyCheckResult({
+            status: 'error',
+            message: `❌ Proxy is dead! Cannot save.\n${result.error || 'Connection failed'}\nPlease fix the proxy or choose "No Proxy".`,
+          });
+          setSaving(false);
+          // Scroll to proxy section
+          scrollToSection('proxy');
+          return;
+        }
+      }
+
       const config = {
         name: form.name || `Profile ${Date.now()}`,
         browserType: form.browser === 'firefox' ? 'firefox' as const : 'chromium' as const,
@@ -414,6 +439,8 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
       onSave?.(form);
     } catch (err: unknown) {
       alert(`Failed to ${isEdit ? 'update' : 'create'} profile: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -885,7 +912,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
 
       {/* Footer */}
       <div className="npf-footer">
-        <button className="btn btn-primary" onClick={handleSave}>{isEdit ? 'Save Changes' : 'Create Profile'}</button>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? '⏳ Checking proxy...' : (isEdit ? 'Save Changes' : 'Create Profile')}
+        </button>
         <button className="btn" onClick={onCancel}>Cancel</button>
       </div>
     </div>
