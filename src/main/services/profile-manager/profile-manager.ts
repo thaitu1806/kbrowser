@@ -232,6 +232,30 @@ export class ProfileManager {
       // Ignore cookie restore errors
     }
 
+    // Restore saved tabs (open URLs from last session)
+    try {
+      const tabsRow = this.db
+        .prepare('SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?')
+        .get(profileId, 'cache') as { data: Buffer | null } | undefined;
+      if (tabsRow?.data) {
+        const urls: string[] = JSON.parse(tabsRow.data.toString('utf-8'));
+        if (Array.isArray(urls) && urls.length > 0) {
+          // Navigate the first page to the first URL
+          const firstPage = context.pages()[0];
+          if (firstPage) {
+            await firstPage.goto(urls[0], { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+          }
+          // Open remaining URLs in new tabs
+          for (let i = 1; i < urls.length; i++) {
+            const newPage = await context.newPage();
+            await newPage.goto(urls[i], { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+          }
+        }
+      }
+    } catch {
+      // Ignore tab restore errors
+    }
+
     // Inject fingerprint spoofing scripts
     if (fpConfig) {
       // Hardware spoofing: CPU cores and RAM
@@ -320,8 +344,36 @@ export class ProfileManager {
       }
     };
 
-    // Auto-save cookies every 5 seconds while browser is open
-    const cookieInterval = setInterval(saveCookies, 5000);
+    // Save open tab URLs to database
+    const saveTabs = async () => {
+      try {
+        const pages = context.pages();
+        const urls = pages
+          .map((p) => p.url())
+          .filter((u) => u && u !== 'about:blank' && !u.startsWith('chrome://'));
+        if (urls.length > 0) {
+          const tabsJson = JSON.stringify(urls);
+          const now4 = new Date().toISOString();
+          const existing = this.db
+            .prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')
+            .get(profileId, 'cache') as { id: string } | undefined;
+          if (existing) {
+            this.db
+              .prepare('UPDATE profile_data SET data = ?, updated_at = ? WHERE id = ?')
+              .run(Buffer.from(tabsJson), now4, existing.id);
+          } else {
+            this.db
+              .prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
+              .run(crypto.randomUUID(), profileId, 'cache', Buffer.from(tabsJson), now4);
+          }
+        }
+      } catch {
+        // Context may already be closed
+      }
+    };
+
+    // Auto-save cookies and tabs every 5 seconds while browser is open
+    const cookieInterval = setInterval(() => { saveCookies(); saveTabs(); }, 5000);
 
     // Also save cookies when any page navigates (captures login cookies immediately)
     context.on('page', (page) => {
@@ -383,7 +435,7 @@ export class ProfileManager {
     // Get the browser context from the tracking Map
     const context = this.openBrowsers.get(profileId);
 
-    // Save cookies before closing
+    // Save cookies and tabs before closing
     if (context) {
       try {
         const cookies = await context.cookies();
@@ -401,6 +453,32 @@ export class ProfileManager {
             this.db
               .prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
               .run(crypto.randomUUID(), profileId, 'cookie', Buffer.from(cookieJson), now3);
+          }
+        }
+      } catch {
+        // Context may already be closing
+      }
+
+      // Save open tab URLs
+      try {
+        const pages = context.pages();
+        const urls = pages
+          .map((p) => p.url())
+          .filter((u) => u && u !== 'about:blank' && !u.startsWith('chrome://'));
+        if (urls.length > 0) {
+          const tabsJson = JSON.stringify(urls);
+          const now4 = new Date().toISOString();
+          const existingTab = this.db
+            .prepare('SELECT id FROM profile_data WHERE profile_id = ? AND data_type = ?')
+            .get(profileId, 'cache') as { id: string } | undefined;
+          if (existingTab) {
+            this.db
+              .prepare('UPDATE profile_data SET data = ?, updated_at = ? WHERE id = ?')
+              .run(Buffer.from(tabsJson), now4, existingTab.id);
+          } else {
+            this.db
+              .prepare('INSERT INTO profile_data (id, profile_id, data_type, data, updated_at) VALUES (?, ?, ?, ?, ?)')
+              .run(crypto.randomUUID(), profileId, 'cache', Buffer.from(tabsJson), now4);
           }
         }
       } catch {
