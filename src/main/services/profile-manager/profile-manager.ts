@@ -502,15 +502,8 @@ export class ProfileManager {
   }
 
   /**
-   * Deletes a browser profile and all its associated isolated data.
-   *
-   * Steps:
-   * 1. Look up the profile in the database
-   * 2. Throw PROFILE_NOT_FOUND if not found
-   * 3. If the profile is currently open, close it first
-   * 4. Delete the profile record from the database (CASCADE handles profile_data,
-   *    profile_extensions, profile_access, rotation_configs)
-   * 5. Delete the profile directory from the filesystem (recursive)
+   * Soft-deletes a browser profile by setting deleted_at timestamp.
+   * The profile moves to Trash and can be restored later.
    *
    * @param profileId - The ID of the profile to delete
    * @throws Error with code PROFILE_NOT_FOUND if profile doesn't exist
@@ -518,7 +511,7 @@ export class ProfileManager {
   async deleteProfile(profileId: string): Promise<void> {
     // Look up the profile in the database
     const row = this.db
-      .prepare('SELECT id, status FROM profiles WHERE id = ?')
+      .prepare('SELECT id, status FROM profiles WHERE id = ? AND deleted_at IS NULL')
       .get(profileId) as { id: string; status: string } | undefined;
 
     if (!row) {
@@ -532,17 +525,81 @@ export class ProfileManager {
       await this.closeProfile(profileId);
     }
 
-    // Delete the profile record from the database
-    // CASCADE will handle: profile_data, profile_extensions, profile_access, rotation_configs
+    // Soft delete: set deleted_at timestamp
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE profiles SET deleted_at = ?, updated_at = ? WHERE id = ?')
+      .run(now, now, profileId);
+  }
+
+  /**
+   * Restores a soft-deleted profile from Trash.
+   *
+   * @param profileId - The ID of the profile to restore
+   * @throws Error with code PROFILE_NOT_FOUND if profile doesn't exist in trash
+   */
+  async restoreProfile(profileId: string): Promise<void> {
+    const row = this.db
+      .prepare('SELECT id FROM profiles WHERE id = ? AND deleted_at IS NOT NULL')
+      .get(profileId) as { id: string } | undefined;
+
+    if (!row) {
+      const error = new Error(`Profile not found in trash: ${profileId}`);
+      (error as Error & { code: number }).code = AppErrorCode.PROFILE_NOT_FOUND;
+      throw error;
+    }
+
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE profiles SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+      .run(now, profileId);
+  }
+
+  /**
+   * Permanently deletes a profile from Trash (hard delete).
+   *
+   * @param profileId - The ID of the profile to permanently delete
+   */
+  async permanentlyDeleteProfile(profileId: string): Promise<void> {
+    const row = this.db
+      .prepare('SELECT id FROM profiles WHERE id = ?')
+      .get(profileId) as { id: string } | undefined;
+
+    if (!row) return;
+
+    // Delete from database (CASCADE handles related data)
     this.db.prepare('DELETE FROM profiles WHERE id = ?').run(profileId);
 
-    // Delete the profile directory from the filesystem
+    // Delete profile directory from filesystem
     const profileDir = this.getProfileDir(profileId);
     try {
       fs.rmSync(profileDir, { recursive: true, force: true });
     } catch {
-      // Directory may not exist (e.g., already cleaned up); ignore errors
+      // Directory may not exist; ignore errors
     }
+  }
+
+  /**
+   * Returns a list of soft-deleted profiles (Trash).
+   */
+  async listDeletedProfiles(): Promise<ProfileSummary[]> {
+    const rows = this.db
+      .prepare('SELECT id, name, status, browser_type, proxy_id, last_used_at FROM profiles WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')
+      .all() as Array<{
+        id: string;
+        name: string;
+        status: string;
+        browser_type: string;
+        proxy_id: string | null;
+        last_used_at: string | null;
+      }>;
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      status: row.status as 'open' | 'closed',
+      browserType: row.browser_type as 'chromium' | 'firefox',
+      proxyAssigned: row.proxy_id,
+      lastUsedAt: row.last_used_at,
+    }));
   }
 
   /**
@@ -706,7 +763,7 @@ export class ProfileManager {
    */
   async listProfiles(): Promise<ProfileSummary[]> {
     const rows = this.db
-      .prepare('SELECT id, name, status, browser_type, proxy_id, last_used_at FROM profiles')
+      .prepare('SELECT id, name, status, browser_type, proxy_id, last_used_at FROM profiles WHERE deleted_at IS NULL')
       .all() as Array<{
         id: string;
         name: string;

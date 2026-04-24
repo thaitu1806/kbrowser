@@ -146,6 +146,28 @@ export function setupIPC(): { profileManager: ProfileManager } {
     });
   });
 
+  ipcMain.handle('profile:restore', async (_event, profileId: string) => {
+    await profileManager.restoreProfile(profileId);
+    const defaultUser = getDefaultUserId();
+    await actionLogger.log({
+      userId: defaultUser, username: 'admin', action: 'profile.restore',
+      profileId, details: {},
+    });
+  });
+
+  ipcMain.handle('profile:permanentDelete', async (_event, profileId: string) => {
+    await profileManager.permanentlyDeleteProfile(profileId);
+    const defaultUser = getDefaultUserId();
+    await actionLogger.log({
+      userId: defaultUser, username: 'admin', action: 'profile.permanentDelete',
+      profileId, details: {},
+    });
+  });
+
+  ipcMain.handle('profile:listDeleted', async () => {
+    return profileManager.listDeletedProfiles();
+  });
+
   ipcMain.handle('profile:update', async (_event, profileId: string, config: Partial<ProfileConfig>) => {
     return profileManager.updateProfile(profileId, config);
   });

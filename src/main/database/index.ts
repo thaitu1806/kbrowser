@@ -45,7 +45,22 @@ export function getDatabase(): Database.Database {
   // Create all tables
   db.exec(SCHEMA_SQL);
 
+  // Run migrations
+  runMigrations(db);
+
   return db;
+}
+
+/**
+ * Runs safe migrations that can't be expressed in CREATE TABLE IF NOT EXISTS.
+ * Each migration checks if it's needed before applying.
+ */
+function runMigrations(instance: Database.Database): void {
+  // Add deleted_at column for soft delete (trash feature)
+  const columns = instance.pragma('table_info(profiles)') as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === 'deleted_at')) {
+    instance.exec('ALTER TABLE profiles ADD COLUMN deleted_at TEXT DEFAULT NULL');
+  }
 }
 
 /**
@@ -63,6 +78,9 @@ export function initializeDatabase(dbPath: string): Database.Database {
 
   // Create all tables
   instance.exec(SCHEMA_SQL);
+
+  // Run migrations
+  runMigrations(instance);
 
   return instance;
 }

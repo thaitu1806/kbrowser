@@ -19,6 +19,9 @@ interface ElectronAPI {
   onOpenStatus(callback: (data: { profileId: string; status: string; message: string }) => void): void;
   closeProfile(id: string): Promise<void>;
   deleteProfile(id: string): Promise<void>;
+  restoreProfile(id: string): Promise<void>;
+  permanentDeleteProfile(id: string): Promise<void>;
+  listDeletedProfiles(): Promise<ProfileSummary[]>;
   updateProfile(id: string, config: Partial<ProfileConfig>): Promise<Profile>;
   getProfileCookies(id: string): Promise<string>;
   getProfileTabs(id: string): Promise<string>;
