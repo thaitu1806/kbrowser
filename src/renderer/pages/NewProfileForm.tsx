@@ -148,6 +148,14 @@ interface ProfileFormData {
   macAddressMode: 'real' | 'custom';
   macAddress: string;
   doNotTrack: 'default' | 'open' | 'close';
+  // Screen Resolution
+  screenResolutionMode: 'random' | 'predefined' | 'custom';
+  screenResolutionValue: string;
+  customWidth: string;
+  customHeight: string;
+  // Language custom
+  customLanguage: string;
+  customDisplayLanguage: string;
   // Advanced tab
   extensionMode: string;
   dataSync: 'global' | 'custom';
@@ -201,6 +209,12 @@ const defaultForm: ProfileFormData = {
   macAddressMode: 'custom',
   macAddress: '00-1F-3A-19-B0-02',
   doNotTrack: 'default',
+  screenResolutionMode: 'predefined',
+  screenResolutionValue: 'Based on User-Agent',
+  customWidth: '1920',
+  customHeight: '1080',
+  customLanguage: 'en-US',
+  customDisplayLanguage: 'en-US',
   extensionMode: 'team',
   dataSync: 'global',
   browserSettings: 'global',
@@ -220,6 +234,30 @@ const WEBGL_RENDERERS = [
   'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)',
   'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0)',
   'ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0)',
+];
+
+const SCREEN_RESOLUTIONS = [
+  'Based on User-Agent',
+  '750 x 1334',
+  '800 x 600',
+  '1024 x 600',
+  '1024 x 640',
+  '1024 x 768',
+  '1152 x 864',
+  '1280 x 720',
+  '1280 x 768',
+  '1280 x 800',
+  '1280 x 1024',
+  '1366 x 768',
+  '1440 x 900',
+  '1536 x 864',
+  '1600 x 900',
+  '1680 x 1050',
+  '1920 x 1080',
+  '1920 x 1200',
+  '2560 x 1440',
+  '2560 x 1600',
+  '3840 x 2160',
 ];
 
 export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewProfileFormProps) {
@@ -262,9 +300,19 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Load profile data when editing
+  // Load profile data when editing, or reset form when creating new
   useEffect(() => {
-    if (!editProfileId) { setIsEdit(false); return; }
+    if (!editProfileId) {
+      setIsEdit(false);
+      setForm(defaultForm);
+      setProxyCheckResult(null);
+      setActiveTab('general');
+      // Scroll back to top
+      if (contentRef.current) {
+        contentRef.current.scrollTop = 0;
+      }
+      return;
+    }
     setIsEdit(true);
     const loadProfile = async () => {
       const api = typeof window !== 'undefined' ? window.electronAPI : null;
@@ -489,8 +537,14 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             location: form.location,
             locationAsk: form.locationAsk,
             language: form.language,
+            customLanguage: form.customLanguage,
             displayLanguage: form.displayLanguage,
+            customDisplayLanguage: form.customDisplayLanguage,
             screenResolution: form.screenResolution,
+            screenResolutionMode: form.screenResolutionMode,
+            screenResolutionValue: form.screenResolutionValue,
+            customWidth: form.customWidth,
+            customHeight: form.customHeight,
             fonts: form.fonts,
             webglMeta: form.webglMeta,
             webglVendor: form.webglVendor,
@@ -556,27 +610,38 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
 
             <FormRow label="Browser">
               <div className="toggle-group">
-                <BrowserButton
-                  type="chromium"
-                  label="SunBrowser"
-                  icon="🌐"
-                  active={form.browser === 'chromium'}
-                  version={form.browser === 'chromium' ? form.browserVersion : 'Auto'}
-                  versions={BROWSER_VERSIONS.chromium}
-                  onSelect={() => { update('browser', 'chromium'); update('browserVersion', 'Auto'); }}
-                  onVersionChange={(ver) => { update('browser', 'chromium'); update('browserVersion', ver); }}
-                />
-                <BrowserButton
-                  type="firefox"
-                  label="FlowerBrowser"
-                  icon="🦊"
-                  active={form.browser === 'firefox'}
-                  version={form.browser === 'firefox' ? form.browserVersion : 'Auto'}
-                  versions={BROWSER_VERSIONS.firefox}
-                  onSelect={() => { update('browser', 'firefox'); update('browserVersion', 'Auto'); }}
-                  onVersionChange={(ver) => { update('browser', 'firefox'); update('browserVersion', ver); }}
-                />
+                {(!form.cookie || form.browser === 'chromium') && (
+                  <BrowserButton
+                    type="chromium"
+                    label="SunBrowser"
+                    icon="🌐"
+                    active={form.browser === 'chromium'}
+                    version={form.browser === 'chromium' ? form.browserVersion : 'Auto'}
+                    versions={BROWSER_VERSIONS.chromium}
+                    onSelect={() => { if (!form.cookie) { update('browser', 'chromium'); update('browserVersion', 'Auto'); } }}
+                    onVersionChange={(ver) => { update('browser', 'chromium'); update('browserVersion', ver); }}
+                    locked={!!form.cookie}
+                  />
+                )}
+                {(!form.cookie || form.browser === 'firefox') && (
+                  <BrowserButton
+                    type="firefox"
+                    label="FlowerBrowser"
+                    icon="🦊"
+                    active={form.browser === 'firefox'}
+                    version={form.browser === 'firefox' ? form.browserVersion : 'Auto'}
+                    versions={BROWSER_VERSIONS.firefox}
+                    onSelect={() => { if (!form.cookie) { update('browser', 'firefox'); update('browserVersion', 'Auto'); } }}
+                    onVersionChange={(ver) => { update('browser', 'firefox'); update('browserVersion', ver); }}
+                    locked={!!form.cookie}
+                  />
+                )}
               </div>
+              {form.cookie && (
+                <div className="field-hint" style={{ marginTop: 4 }}>
+                  Browser is locked when cookie is set.
+                </div>
+              )}
             </FormRow>
 
             <FormRow label="OS">
@@ -628,7 +693,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 <input
                   value={form.userAgent}
                   onChange={(e) => setForm((prev) => ({ ...prev, userAgent: e.target.value }))}
-                  className="ua-input"
+                  className={`ua-input ${form.cookie ? 'ua-truncated' : ''}`}
+                  readOnly={!!form.cookie}
+                  title={form.userAgent}
                 />
                 <button className="icon-btn" title="Save" onClick={() => {
                   const saved = JSON.parse(localStorage.getItem('savedUAs') || '[]');
@@ -638,7 +705,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   }
                   alert('User-Agent saved!');
                 }}>💾</button>
-                <button className="icon-btn" title="Random" onClick={handleRandomUA}>🔀</button>
+                {!form.cookie && (
+                  <button className="icon-btn" title="Random" onClick={handleRandomUA}>🔀</button>
+                )}
               </div>
             </FormRow>
 
@@ -654,10 +723,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                     <option key={g.id} value={g.name}>{g.name}</option>
                   ))}
                 </select>
-                <button className="tags-btn" onClick={() => {
-                  const tag = prompt('Enter tag name:');
-                  if (tag) update('tags', [...form.tags, tag]);
-                }}>🏷️ Tags{form.tags.length > 0 ? ` (${form.tags.length})` : ''}</button>
+                <TagsDropdown tags={form.tags} onChange={(tags) => update('tags', tags)} />
               </div>
               {form.tags.length > 0 && (
                 <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -672,10 +738,11 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             </FormRow>
 
             <FormRow label="Cookie">
-              <input
+              <textarea
                 value={form.cookie}
                 onChange={(e) => update('cookie', e.target.value)}
                 placeholder="Formats: JSON, Netscape, Name=Value"
+                rows={3}
               />
               <div className="merge-cookie" onClick={() => {
                 const newCookie = prompt('Enter cookie to merge:');
@@ -891,6 +958,92 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   Always allow
                 </label>
               </div>
+            </FormRow>
+
+            <FormRow label="Language">
+              <div className="toggle-group">
+                {(['based-on-ip', 'custom'] as const).map((v) => (
+                  <button
+                    key={v}
+                    className={`toggle-btn ${form.language === v ? 'active' : ''}`}
+                    onClick={() => update('language', v)}
+                  >
+                    {v === 'based-on-ip' ? 'Based on IP' : 'Custom'}
+                  </button>
+                ))}
+              </div>
+              {form.language === 'custom' && (
+                <input
+                  value={form.customLanguage}
+                  onChange={(e) => update('customLanguage', e.target.value)}
+                  placeholder="e.g. en-US, vi-VN, ja-JP"
+                  style={{ marginTop: 8 }}
+                />
+              )}
+            </FormRow>
+
+            <FormRow label="Display language">
+              <div className="toggle-group">
+                {(['based-on-language', 'real', 'custom'] as const).map((v) => (
+                  <button
+                    key={v}
+                    className={`toggle-btn ${form.displayLanguage === v ? 'active' : ''}`}
+                    onClick={() => update('displayLanguage', v)}
+                  >
+                    {v === 'based-on-language' ? 'Based on Language' : v === 'real' ? 'Real' : 'Custom'}
+                  </button>
+                ))}
+              </div>
+              {form.displayLanguage === 'custom' && (
+                <input
+                  value={form.customDisplayLanguage}
+                  onChange={(e) => update('customDisplayLanguage', e.target.value)}
+                  placeholder="e.g. en-US, vi-VN, ja-JP"
+                  style={{ marginTop: 8 }}
+                />
+              )}
+            </FormRow>
+
+            <FormRow label="Screen Resolution">
+              <div className="toggle-group">
+                {(['random', 'predefined', 'custom'] as const).map((v) => (
+                  <button
+                    key={v}
+                    className={`toggle-btn ${form.screenResolutionMode === v ? 'active' : ''}`}
+                    onClick={() => update('screenResolutionMode', v)}
+                  >
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+              {form.screenResolutionMode === 'predefined' && (
+                <select
+                  value={form.screenResolutionValue}
+                  onChange={(e) => update('screenResolutionValue', e.target.value)}
+                  style={{ marginTop: 8 }}
+                >
+                  {SCREEN_RESOLUTIONS.map((res) => (
+                    <option key={res} value={res}>{res}</option>
+                  ))}
+                </select>
+              )}
+              {form.screenResolutionMode === 'custom' && (
+                <div className="renderer-row" style={{ marginTop: 8 }}>
+                  <input
+                    value={form.customWidth}
+                    onChange={(e) => update('customWidth', e.target.value)}
+                    placeholder="Width"
+                    style={{ width: 100 }}
+                  />
+                  <span style={{ color: '#8896a6' }}>×</span>
+                  <input
+                    value={form.customHeight}
+                    onChange={(e) => update('customHeight', e.target.value)}
+                    placeholder="Height"
+                    style={{ width: 100 }}
+                  />
+                </div>
+              )}
             </FormRow>
           </div>
 
@@ -1196,6 +1349,7 @@ function BrowserButton({
   versions,
   onSelect,
   onVersionChange,
+  locked,
 }: {
   type: BrowserType;
   label: string;
@@ -1205,22 +1359,25 @@ function BrowserButton({
   versions: string[];
   onSelect: () => void;
   onVersionChange: (ver: string) => void;
+  locked?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="browser-dropdown-wrapper">
-      <div className={`browser-btn-group ${active ? 'active' : ''}`}>
-        <button className="browser-btn-main" onClick={onSelect}>
+      <div className={`browser-btn-group ${active ? 'active' : ''} ${locked ? 'locked' : ''}`}>
+        <button className="browser-btn-main" onClick={onSelect} disabled={locked}>
           <span className="browser-icon">{icon}</span>
           <span className="browser-label">{label}</span>
         </button>
-        <button
-          className="browser-btn-arrow"
-          onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        >
-          {open ? '∧' : '∨'}
-        </button>
+        {!locked && (
+          <button
+            className="browser-btn-arrow"
+            onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+          >
+            {open ? '∧' : '∨'}
+          </button>
+        )}
       </div>
       {open && (
         <>
@@ -1292,6 +1449,89 @@ function OsButton({
                 <span className="os-dropdown-check">✓</span>
               </button>
             ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TagsDropdown({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Saved tags from localStorage
+  const [savedTags, setSavedTags] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('savedTags') || '[]');
+    } catch { return []; }
+  });
+
+  const filteredTags = savedTags.filter(
+    (t) => t.toLowerCase().includes(search.toLowerCase()) && !tags.includes(t)
+  );
+
+  const canCreate = search.trim() && !savedTags.includes(search.trim()) && !tags.includes(search.trim());
+
+  const addTag = (tag: string) => {
+    if (!tags.includes(tag)) {
+      onChange([...tags, tag]);
+    }
+    if (!savedTags.includes(tag)) {
+      const next = [...savedTags, tag];
+      setSavedTags(next);
+      localStorage.setItem('savedTags', JSON.stringify(next));
+    }
+    setSearch('');
+  };
+
+  useEffect(() => {
+    if (open && inputRef.current) inputRef.current.focus();
+  }, [open]);
+
+  return (
+    <div className="tags-dropdown-wrapper">
+      <button
+        className={`tags-btn ${open ? 'active' : ''}`}
+        onClick={() => setOpen(!open)}
+      >
+        🏷️ Tags {open ? '∧' : '∨'}
+      </button>
+      {open && (
+        <>
+          <div className="os-dropdown-backdrop" onClick={() => { setOpen(false); setSearch(''); }} />
+          <div className="tags-dropdown">
+            <div className="tags-dropdown-search">
+              <span className="tags-search-icon">🔍</span>
+              <input
+                ref={inputRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Tag ở đây"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && canCreate) {
+                    addTag(search.trim());
+                  }
+                }}
+              />
+            </div>
+            {canCreate && (
+              <div className="tags-dropdown-create" onClick={() => addTag(search.trim())}>
+                Create <span className="tags-new-badge">{search.trim()} ✓</span> <span className="tags-enter">↵</span>
+              </div>
+            )}
+            {filteredTags.length > 0 ? (
+              <div className="tags-dropdown-list">
+                {filteredTags.map((tag) => (
+                  <button key={tag} className="tags-dropdown-item" onClick={() => addTag(tag)}>
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              !canCreate && <div className="tags-dropdown-empty">No data</div>
+            )}
           </div>
         </>
       )}

@@ -118,7 +118,7 @@ function App() {
 
         {/* New Profile Button */}
         <div className="sidebar-action">
-          <button className="btn-new-profile" onClick={() => setActivePage('new-profile')}>
+          <button className="btn-new-profile" onClick={() => { setEditProfileId(null); setActivePage('new-profile'); }}>
             {sidebarCollapsed ? '+' : '+ New Profile'}
           </button>
         </div>
