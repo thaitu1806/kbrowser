@@ -1303,6 +1303,46 @@ tr:hover { background: #f8faff; }
   color: var(--text-muted);
 }
 
+.location-custom-box {
+  margin-top: 10px;
+  padding: 16px;
+  background: var(--bg-main);
+  border-radius: 10px;
+}
+
+.lang-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+}
+
+.lang-item:last-of-type {
+  border-bottom: none;
+}
+
+.lang-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.lang-checkbox-row:hover {
+  background: var(--border-light);
+}
+
+.lang-checkbox-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 .merge-cookie {
   font-size: 12px;
   color: var(--primary);

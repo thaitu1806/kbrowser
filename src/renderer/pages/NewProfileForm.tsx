@@ -122,8 +122,12 @@ interface ProfileFormData {
   // Fingerprint
   webrtc: WebRTCMode;
   timezone: 'based-on-ip' | 'real' | 'custom';
+  customTimezone: string;
   location: 'based-on-ip' | 'custom' | 'block';
   locationAsk: boolean;
+  locationLatitude: string;
+  locationLongitude: string;
+  locationAccuracy: number;
   language: 'based-on-ip' | 'real' | 'custom';
   displayLanguage: 'based-on-language' | 'real' | 'custom';
   screenResolution: 'based-on-ua' | 'real' | 'custom';
@@ -154,7 +158,7 @@ interface ProfileFormData {
   customWidth: string;
   customHeight: string;
   // Language custom
-  customLanguage: string;
+  customLanguages: string[];
   customDisplayLanguage: string;
   // Advanced tab
   extensionMode: string;
@@ -184,8 +188,12 @@ const defaultForm: ProfileFormData = {
   tabs: '',
   webrtc: 'disabled',
   timezone: 'based-on-ip',
+  customTimezone: 'GMT+07:00 Asia/Ho_Chi_Minh',
   location: 'based-on-ip',
   locationAsk: true,
+  locationLatitude: '',
+  locationLongitude: '',
+  locationAccuracy: 1000,
   language: 'based-on-ip',
   displayLanguage: 'based-on-language',
   screenResolution: 'based-on-ua',
@@ -213,7 +221,7 @@ const defaultForm: ProfileFormData = {
   screenResolutionValue: 'Based on User-Agent',
   customWidth: '1920',
   customHeight: '1080',
-  customLanguage: 'en-US',
+  customLanguages: ['English (United States)', 'English'],
   customDisplayLanguage: 'en-US',
   extensionMode: 'team',
   dataSync: 'global',
@@ -234,6 +242,104 @@ const WEBGL_RENDERERS = [
   'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)',
   'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0)',
   'ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0)',
+];
+
+const DISPLAY_LANGUAGES = [
+  { name: 'العربية', code: 'ar' },
+  { name: 'አማርኛ', code: 'am' },
+  { name: 'eesti', code: 'et' },
+  { name: 'български', code: 'bg' },
+  { name: 'polski', code: 'pl' },
+  { name: 'فارسی', code: 'fa' },
+  { name: 'dansk', code: 'da' },
+  { name: 'Deutsch', code: 'de' },
+  { name: 'English', code: 'en' },
+  { name: 'English (United States)', code: 'en-US' },
+  { name: 'English (United Kingdom)', code: 'en-GB' },
+  { name: 'español', code: 'es' },
+  { name: 'français', code: 'fr' },
+  { name: 'हिन्दी', code: 'hi' },
+  { name: 'hrvatski', code: 'hr' },
+  { name: 'Indonesia', code: 'id' },
+  { name: 'italiano', code: 'it' },
+  { name: '日本語', code: 'ja' },
+  { name: '한국어', code: 'ko' },
+  { name: 'lietuvių', code: 'lt' },
+  { name: 'latviešu', code: 'lv' },
+  { name: 'magyar', code: 'hu' },
+  { name: 'Melayu', code: 'ms' },
+  { name: 'Nederlands', code: 'nl' },
+  { name: 'norsk', code: 'no' },
+  { name: 'português', code: 'pt' },
+  { name: 'português (Brasil)', code: 'pt-BR' },
+  { name: 'română', code: 'ro' },
+  { name: 'русский', code: 'ru' },
+  { name: 'slovenčina', code: 'sk' },
+  { name: 'slovenščina', code: 'sl' },
+  { name: 'suomi', code: 'fi' },
+  { name: 'svenska', code: 'sv' },
+  { name: 'ไทย', code: 'th' },
+  { name: 'Tiếng Việt', code: 'vi' },
+  { name: 'Türkçe', code: 'tr' },
+  { name: 'українська', code: 'uk' },
+  { name: '中文（简体）', code: 'zh-CN' },
+  { name: '中文（繁體）', code: 'zh-TW' },
+];
+
+const LANGUAGES = [
+  'Afrikaans', 'Amharic', 'Aragonese', 'Arabic', 'Asturian', 'Azerbaijani',
+  'Belarusian', 'Bulgarian', 'Bangla', 'Breton', 'Bosnian', 'Catalan',
+  'Czech', 'Welsh', 'Danish', 'German', 'Greek', 'English',
+  'English (United States)', 'English (United Kingdom)', 'English (Australia)',
+  'Esperanto', 'Spanish', 'Spanish (Latin America)', 'Estonian', 'Basque',
+  'Persian', 'Finnish', 'French', 'French (Canada)', 'Galician', 'Gujarati',
+  'Hebrew', 'Hindi', 'Croatian', 'Hungarian', 'Armenian', 'Indonesian',
+  'Icelandic', 'Italian', 'Japanese', 'Javanese', 'Georgian', 'Kazakh',
+  'Khmer', 'Kannada', 'Korean', 'Kurdish', 'Lao', 'Lithuanian', 'Latvian',
+  'Macedonian', 'Malayalam', 'Mongolian', 'Marathi', 'Malay', 'Burmese',
+  'Norwegian', 'Nepali', 'Dutch', 'Occitan', 'Polish', 'Portuguese',
+  'Portuguese (Brazil)', 'Romanian', 'Russian', 'Sinhala', 'Slovak',
+  'Slovenian', 'Albanian', 'Serbian', 'Swedish', 'Swahili', 'Tamil',
+  'Telugu', 'Thai', 'Tagalog', 'Turkish', 'Ukrainian', 'Urdu',
+  'Uzbek', 'Vietnamese', 'Chinese (Simplified)', 'Chinese (Traditional)',
+];
+
+const TIMEZONES = [
+  'GMT-12:00 Etc/GMT+12',
+  'GMT-11:00 Pacific/Midway',
+  'GMT-10:00 Pacific/Honolulu',
+  'GMT-09:00 America/Anchorage',
+  'GMT-08:00 America/Los_Angeles',
+  'GMT-07:00 America/Denver',
+  'GMT-06:00 America/Chicago',
+  'GMT-05:00 America/New_York',
+  'GMT-04:00 America/Halifax',
+  'GMT-03:30 America/St_Johns',
+  'GMT-03:00 America/Sao_Paulo',
+  'GMT-02:00 Atlantic/South_Georgia',
+  'GMT-01:00 Atlantic/Azores',
+  'GMT+00:00 Europe/London',
+  'GMT+01:00 Europe/Paris',
+  'GMT+02:00 Europe/Helsinki',
+  'GMT+03:00 Europe/Moscow',
+  'GMT+03:30 Asia/Tehran',
+  'GMT+04:00 Asia/Dubai',
+  'GMT+04:30 Asia/Kabul',
+  'GMT+05:00 Asia/Karachi',
+  'GMT+05:30 Asia/Kolkata',
+  'GMT+05:45 Asia/Kathmandu',
+  'GMT+06:00 Asia/Dhaka',
+  'GMT+06:30 Asia/Yangon',
+  'GMT+07:00 Asia/Bangkok',
+  'GMT+07:00 Asia/Ho_Chi_Minh',
+  'GMT+08:00 Asia/Shanghai',
+  'GMT+08:00 Asia/Singapore',
+  'GMT+09:00 Asia/Tokyo',
+  'GMT+09:30 Australia/Darwin',
+  'GMT+10:00 Australia/Sydney',
+  'GMT+11:00 Pacific/Noumea',
+  'GMT+12:00 Pacific/Auckland',
+  'GMT+13:00 Pacific/Tongatapu',
 ];
 
 const SCREEN_RESOLUTIONS = [
@@ -534,10 +640,14 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             remark: form.remark,
             ipChecker: form.ipChecker,
             timezone: form.timezone,
+            customTimezone: form.customTimezone,
             location: form.location,
             locationAsk: form.locationAsk,
+            locationLatitude: form.locationLatitude,
+            locationLongitude: form.locationLongitude,
+            locationAccuracy: form.locationAccuracy,
             language: form.language,
-            customLanguage: form.customLanguage,
+            customLanguages: form.customLanguages,
             displayLanguage: form.displayLanguage,
             customDisplayLanguage: form.customDisplayLanguage,
             screenResolution: form.screenResolution,
@@ -934,6 +1044,17 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   </button>
                 ))}
               </div>
+              {form.timezone === 'custom' && (
+                <select
+                  value={form.customTimezone}
+                  onChange={(e) => update('customTimezone', e.target.value)}
+                  style={{ marginTop: 8 }}
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+              )}
             </FormRow>
 
             <FormRow label="Location">
@@ -958,6 +1079,39 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   Always allow
                 </label>
               </div>
+              {form.location === 'custom' && (
+                <div className="location-custom-box">
+                  <div className="npf-form-row" style={{ marginBottom: 12 }}>
+                    <label className="npf-label" style={{ color: '#ef4444' }}>* Latitude / Longitude</label>
+                    <div className="renderer-row">
+                      <input
+                        value={form.locationLatitude}
+                        onChange={(e) => update('locationLatitude', e.target.value)}
+                        placeholder="Latitude"
+                        style={{ flex: 1 }}
+                      />
+                      <input
+                        value={form.locationLongitude}
+                        onChange={(e) => update('locationLongitude', e.target.value)}
+                        placeholder="Longitude"
+                        style={{ flex: 1 }}
+                      />
+                    </div>
+                  </div>
+                  <div className="npf-form-row">
+                    <label className="npf-label">Accuracy (m)</label>
+                    <div className="npf-field">
+                      <input
+                        type="number"
+                        value={form.locationAccuracy}
+                        onChange={(e) => update('locationAccuracy', parseInt(e.target.value) || 0)}
+                        min={1}
+                        style={{ width: 120 }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </FormRow>
 
             <FormRow label="Language">
@@ -973,11 +1127,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 ))}
               </div>
               {form.language === 'custom' && (
-                <input
-                  value={form.customLanguage}
-                  onChange={(e) => update('customLanguage', e.target.value)}
-                  placeholder="e.g. en-US, vi-VN, ja-JP"
-                  style={{ marginTop: 8 }}
+                <LanguagePicker
+                  selected={form.customLanguages}
+                  onChange={(langs) => update('customLanguages', langs)}
                 />
               )}
             </FormRow>
@@ -995,12 +1147,16 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 ))}
               </div>
               {form.displayLanguage === 'custom' && (
-                <input
+                <select
                   value={form.customDisplayLanguage}
                   onChange={(e) => update('customDisplayLanguage', e.target.value)}
-                  placeholder="e.g. en-US, vi-VN, ja-JP"
                   style={{ marginTop: 8 }}
-                />
+                  className="display-lang-select"
+                >
+                  {DISPLAY_LANGUAGES.map((lang) => (
+                    <option key={lang.code} value={lang.code}>{lang.name}</option>
+                  ))}
+                </select>
               )}
             </FormRow>
 
@@ -1534,6 +1690,92 @@ function TagsDropdown({ tags, onChange }: { tags: string[]; onChange: (tags: str
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function LanguagePicker({ selected, onChange }: { selected: string[]; onChange: (langs: string[]) => void }) {
+  const [showModal, setShowModal] = useState(false);
+  const [search, setSearch] = useState('');
+  const [pending, setPending] = useState<string[]>([]);
+
+  const openModal = () => {
+    setPending([...selected]);
+    setSearch('');
+    setShowModal(true);
+  };
+
+  const toggleLang = (lang: string) => {
+    setPending((prev) =>
+      prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]
+    );
+  };
+
+  const handleOk = () => {
+    onChange(pending);
+    setShowModal(false);
+  };
+
+  const removeLang = (lang: string) => {
+    onChange(selected.filter((l) => l !== lang));
+  };
+
+  const filtered = LANGUAGES.filter((l) =>
+    l.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div className="location-custom-box">
+        {selected.map((lang) => (
+          <div key={lang} className="lang-item">
+            <span>{lang}</span>
+            <button className="btn-more" onClick={() => removeLang(lang)} title="Remove">✕</button>
+          </div>
+        ))}
+        <button className="add-platform-btn" onClick={openModal} style={{ marginTop: selected.length > 0 ? 8 : 0 }}>
+          ⊕ Add Language
+        </button>
+      </div>
+
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ minWidth: 380, maxWidth: 480 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0 }}>Add Language</h3>
+              <button className="btn-more" onClick={() => setShowModal(false)} style={{ fontSize: 20 }}>✕</button>
+            </div>
+            <div className="search-box" style={{ marginBottom: 12 }}>
+              <span className="search-icon">🔍</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Keyword search"
+                autoFocus
+              />
+            </div>
+            <div style={{ maxHeight: 320, overflowY: 'auto', marginBottom: 16 }}>
+              {filtered.map((lang) => (
+                <label key={lang} className="lang-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={pending.includes(lang)}
+                    onChange={() => toggleLang(lang)}
+                  />
+                  <span>{lang}</span>
+                </label>
+              ))}
+              {filtered.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 20, color: '#a0aec0' }}>No results</div>
+              )}
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-primary" onClick={handleOk}>OK</button>
+              <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
