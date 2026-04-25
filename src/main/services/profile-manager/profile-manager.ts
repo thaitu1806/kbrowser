@@ -233,14 +233,14 @@ export class ProfileManager {
       // Ignore cookie restore errors
     }
 
-    // Open fingerprint check page as first tab
+    // Open fingerprint dashboard as first tab (inline HTML — no server needed)
     try {
       const firstPage = context.pages()[0];
       if (firstPage) {
-        await firstPage.goto('http://127.0.0.1:5015/fingerprint-check', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+        await firstPage.setContent(this.getFingerprintDashboardHTML(), { waitUntil: 'domcontentloaded' });
       }
     } catch {
-      // Ignore — local API server may not be running
+      // Ignore errors
     }
 
     // Restore saved tabs (open URLs from last session) — all in NEW tabs
@@ -409,6 +409,137 @@ export class ProfileManager {
       wsEndpoint,
       profileId,
     };
+  }
+
+  /**
+   * Returns inline HTML for the fingerprint verification dashboard.
+   * Opens external checker sites in new tabs via JavaScript.
+   */
+  private getFingerprintDashboardHTML(): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>🛡️ DigitalID — Fingerprint Dashboard</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:20px}
+.header{text-align:center;padding:16px 0 20px}
+.header h1{font-size:22px;color:#4a6cf7}
+.header p{color:#6b7b8d;font-size:13px;margin-top:4px}
+.info{background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:flex;flex-wrap:wrap;gap:20px;font-size:13px}
+.info .item{display:flex;flex-direction:column;gap:2px}
+.info .label{font-size:11px;color:#6b7b8d}
+.info .val{font-family:'SF Mono',Consolas,monospace;font-size:12px;word-break:break-all}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px}
+.section-title{font-size:14px;font-weight:600;color:#4a6cf7;margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+.card{background:#fff;border-radius:10px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:12px}
+.card:hover{border-color:#4a6cf7;transform:translateY(-1px);box-shadow:0 4px 12px rgba(74,108,247,.15)}
+.card .icon{font-size:24px;flex-shrink:0}
+.card .text h3{font-size:13px;font-weight:600;margin-bottom:2px}
+.card .text p{font-size:11px;color:#6b7b8d}
+.btn-open-all{background:#4a6cf7;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer;margin:20px auto;display:block}
+.btn-open-all:hover{background:#3b5de7}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🛡️ DigitalID — Fingerprint Dashboard</h1>
+  <p>Click any card to open the checker in a new tab</p>
+</div>
+
+<div class="info" id="info"></div>
+
+<div class="section-title">📊 Comprehensive Checks</div>
+<div class="grid">
+  <div class="card" onclick="window.open('https://browserleaks.com','_blank')">
+    <span class="icon">🔍</span>
+    <div class="text"><h3>BrowserLeaks</h3><p>Canvas, WebGL, WebRTC, Fonts, Audio, JS — all in one</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://abrahamjuliot.github.io/creepjs/','_blank')">
+    <span class="icon">👻</span>
+    <div class="text"><h3>CreepJS</h3><p>Detect fingerprint spoofing, trust score</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://fingerprintjs.github.io/fingerprintjs/','_blank')">
+    <span class="icon">🆔</span>
+    <div class="text"><h3>FingerprintJS</h3><p>Popular fingerprinting library demo</p></div>
+  </div>
+</div>
+
+<div class="section-title">🔎 Specific Checks</div>
+<div class="grid">
+  <div class="card" onclick="window.open('https://browserleaks.com/webrtc','_blank')">
+    <span class="icon">📡</span>
+    <div class="text"><h3>WebRTC Leak</h3><p>Check if real IP leaks via WebRTC</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://browserleaks.com/canvas','_blank')">
+    <span class="icon">🎨</span>
+    <div class="text"><h3>Canvas Fingerprint</h3><p>Canvas rendering uniqueness</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://browserleaks.com/webgl','_blank')">
+    <span class="icon">🎮</span>
+    <div class="text"><h3>WebGL Info</h3><p>Vendor, renderer, extensions</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://browserleaks.com/javascript','_blank')">
+    <span class="icon">⚙️</span>
+    <div class="text"><h3>JS / Timezone / CPU</h3><p>Navigator, timezone, hardware info</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://browserleaks.com/fonts','_blank')">
+    <span class="icon">🔤</span>
+    <div class="text"><h3>Fonts</h3><p>Detected system fonts</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://ipleak.net','_blank')">
+    <span class="icon">🌐</span>
+    <div class="text"><h3>IP / DNS Leak</h3><p>IP address, DNS, proxy detection</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://whatismybrowser.com','_blank')">
+    <span class="icon">🧭</span>
+    <div class="text"><h3>User-Agent / OS</h3><p>Browser detection details</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://whatismyscreenresolution.net','_blank')">
+    <span class="icon">🖥️</span>
+    <div class="text"><h3>Screen Resolution</h3><p>Display size and pixel ratio</p></div>
+  </div>
+</div>
+
+<div class="section-title">🤖 Bot Detection</div>
+<div class="grid">
+  <div class="card" onclick="window.open('https://bot.sannysoft.com','_blank')">
+    <span class="icon">🕵️</span>
+    <div class="text"><h3>Sannysoft Bot Test</h3><p>Automation / bot detection checks</p></div>
+  </div>
+  <div class="card" onclick="window.open('https://pixelscan.net','_blank')">
+    <span class="icon">📐</span>
+    <div class="text"><h3>PixelScan</h3><p>Fingerprint consistency score</p></div>
+  </div>
+</div>
+
+<button class="btn-open-all" onclick="openAll()">🚀 Open All Checks (new tabs)</button>
+
+<script>
+// Quick info
+const info = document.getElementById('info');
+const items = [
+  ['User-Agent', navigator.userAgent],
+  ['Platform', navigator.platform],
+  ['Language', navigator.language],
+  ['Screen', screen.width+'x'+screen.height],
+  ['CPU Cores', navigator.hardwareConcurrency||'?'],
+  ['RAM', (navigator.deviceMemory||'?')+' GB'],
+  ['Timezone', Intl.DateTimeFormat().resolvedOptions().timeZone],
+  ['DNT', navigator.doNotTrack||'unset'],
+];
+items.forEach(([l,v])=>{
+  info.innerHTML+='<div class="item"><span class="label">'+l+'</span><span class="val">'+v+'</span></div>';
+});
+
+function openAll(){
+  const urls=['https://browserleaks.com','https://abrahamjuliot.github.io/creepjs/','https://bot.sannysoft.com','https://pixelscan.net','https://ipleak.net'];
+  urls.forEach(u=>window.open(u,'_blank'));
+}
+</script>
+</body>
+</html>`;
   }
 
   /**
