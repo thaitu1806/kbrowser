@@ -20,7 +20,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    title: 'Digital Identity Management',
+    title: "Ken's Browser IM",
   });
 
   if (process.env.NODE_ENV === 'development') {

@@ -427,7 +427,7 @@ export class ProfileManager {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>🛡️ DigitalID — Fingerprint Dashboard</title>
+<title>🛡️ Ken\\'s Browser IM — Fingerprint Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:20px}
@@ -451,7 +451,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </head>
 <body>
 <div class="header">
-  <h1>🛡️ DigitalID — Fingerprint Dashboard</h1>
+  <h1>🛡️ Ken\\'s Browser IM — Fingerprint Dashboard</h1>
   <p>Click any card to open the checker in a new tab</p>
 </div>
 

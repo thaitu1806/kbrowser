@@ -109,7 +109,7 @@ function App() {
         <div className="sidebar-header">
           <div className="logo">
             <span className="logo-icon">🛡️</span>
-            {!sidebarCollapsed && <span className="logo-text">DigitalID</span>}
+            {!sidebarCollapsed && <span className="logo-text">Ken's Browser IM</span>}
           </div>
           <button className="sidebar-toggle" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
             {sidebarCollapsed ? '›' : '‹'}
