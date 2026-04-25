@@ -159,6 +159,7 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   const [extName, setExtName] = useState('');
   const [introduction, setIntroduction] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,41 +181,32 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
     }
   };
 
+  const setIconFromFile = (f: File) => {
+    if (f.size > 1024 * 1024) {
+      setError('Icon file must be less than 1MB');
+      return;
+    }
+    if (!f.type.startsWith('image/')) {
+      setError('Only image files (jpg/jpeg/png) are supported');
+      return;
+    }
+    // Revoke previous object URL to avoid memory leaks
+    if (iconPreview) {
+      URL.revokeObjectURL(iconPreview);
+    }
+    setIconFile(f);
+    setIconPreview(URL.createObjectURL(f));
+  };
+
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) {
-      if (f.size > 1024 * 1024) {
-        setError('Icon file must be less than 1MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        if (result && result.startsWith('data:image')) {
-          setIconPreview(result);
-        }
-      };
-      reader.readAsDataURL(f);
-    }
+    if (f) setIconFromFile(f);
   };
 
   const handleIconDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
-    if (f && (f.type === 'image/png' || f.type === 'image/jpeg' || f.type === 'image/jpg')) {
-      if (f.size > 1024 * 1024) {
-        setError('Icon file must be less than 1MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        if (result && result.startsWith('data:image')) {
-          setIconPreview(result);
-        }
-      };
-      reader.readAsDataURL(f);
-    }
+    if (f) setIconFromFile(f);
   };
 
   const handleSubmit = async () => {
@@ -302,7 +294,7 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
                   onDrop={handleIconDrop}
                   onDragOver={(e) => e.preventDefault()}
                 >
-                  {iconPreview && iconPreview.startsWith('data:image') ? (
+                  {iconPreview ? (
                     <img src={iconPreview} alt="icon" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
                   ) : (
                     <>
