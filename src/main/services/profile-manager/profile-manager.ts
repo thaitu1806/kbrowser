@@ -199,9 +199,10 @@ export class ProfileManager {
             '--disable-component-update',
             '--disable-background-networking',
             '--disable-dev-shm-usage',
+            '--test-type',
           ],
       viewport: null,
-      ignoreDefaultArgs: ['--enable-automation', '--host-resolver-rules'],
+      ignoreDefaultArgs: ['--enable-automation'],
       env: {
         ...process.env,
         GOOGLE_API_KEY: 'no',
