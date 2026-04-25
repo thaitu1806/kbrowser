@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ProfilesPage from './pages/ProfilesPage';
 import GroupsPage from './pages/GroupsPage';
 import NewProfileForm from './pages/NewProfileForm';
@@ -54,6 +54,23 @@ function App() {
 
   const [editProfileId, setEditProfileId] = useState<string | null>(null);
   const [initialGroupFilter, setInitialGroupFilter] = useState<string | null>(null);
+  const [profileCount, setProfileCount] = useState(0);
+
+  // Load profile count
+  useEffect(() => {
+    const loadCount = async () => {
+      const api = typeof window !== 'undefined' ? window.electronAPI : null;
+      if (api?.listProfiles) {
+        try {
+          const list = await api.listProfiles();
+          setProfileCount(list.length);
+        } catch { /* ignore */ }
+      }
+    };
+    loadCount();
+    const interval = setInterval(loadCount, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   const renderPage = () => {
     switch (activePage) {
@@ -165,7 +182,7 @@ function App() {
             <div className="sidebar-stats">
               <div className="stat-row">
                 <span>Profiles</span>
-                <span className="stat-value">9 / 12</span>
+                <span className="stat-value">{profileCount} / ∞</span>
               </div>
               <div className="stat-row">
                 <span>Members</span>
