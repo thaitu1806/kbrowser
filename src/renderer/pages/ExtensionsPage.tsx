@@ -210,12 +210,11 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   };
 
   const handleSubmit = async () => {
-    if (!extName.trim()) {
-      setError('Extension name is required');
-      return;
-    }
-
     if (type === 'upload') {
+      if (!extName.trim()) {
+        setError('Extension name is required');
+        return;
+      }
       if (!file) {
         setError('Please select a .zip file');
         return;
@@ -237,6 +236,10 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
     } else {
       if (!storeUrl.trim()) {
         setError('Please enter a Chrome Web Store URL');
+        return;
+      }
+      if (!storeUrl.includes('chromewebstore.google.com') && !storeUrl.includes('chrome.google.com')) {
+        setError('Please enter a valid Chrome Web Store URL');
         return;
       }
       setError('Chrome Web Store download is not yet supported. Please use Upload File.');
@@ -349,33 +352,37 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
           </div>
         )}
 
-        {/* Extension Name */}
-        <div className="npf-form-row" style={{ marginBottom: 16 }}>
-          <label className="npf-label" style={{ color: '#ef4444' }}>* Extension Name</label>
-          <div className="npf-field">
-            <input
-              value={extName}
-              onChange={(e) => setExtName(e.target.value.slice(0, 20))}
-              placeholder="Required, please fill in the extension name"
-              maxLength={20}
-            />
-            <span className="char-count">{extName.length} / 20</span>
+        {/* Extension Name — only for Upload File */}
+        {type === 'upload' && (
+          <div className="npf-form-row" style={{ marginBottom: 16 }}>
+            <label className="npf-label" style={{ color: '#ef4444' }}>* Extension Name</label>
+            <div className="npf-field">
+              <input
+                value={extName}
+                onChange={(e) => setExtName(e.target.value.slice(0, 20))}
+                placeholder="Required, please fill in the extension name"
+                maxLength={20}
+              />
+              <span className="char-count">{extName.length} / 20</span>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Introduction */}
-        <div className="npf-form-row" style={{ marginBottom: 20 }}>
-          <label className="npf-label">Introduction</label>
-          <div className="npf-field">
-            <input
-              value={introduction}
-              onChange={(e) => setIntroduction(e.target.value.slice(0, 200))}
-              placeholder="Optional, please fill in the brief description of the extension"
-              maxLength={200}
-            />
-            <span className="char-count">{introduction.length} / 200</span>
+        {/* Introduction — only for Upload File */}
+        {type === 'upload' && (
+          <div className="npf-form-row" style={{ marginBottom: 20 }}>
+            <label className="npf-label">Introduction</label>
+            <div className="npf-field">
+              <input
+                value={introduction}
+                onChange={(e) => setIntroduction(e.target.value.slice(0, 200))}
+                placeholder="Optional, please fill in the brief description of the extension"
+                maxLength={200}
+              />
+              <span className="char-count">{introduction.length} / 200</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {error && (
           <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>⚠ {error}</div>
