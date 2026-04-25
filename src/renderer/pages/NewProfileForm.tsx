@@ -1940,7 +1940,7 @@ function ExtensionCategoryPicker({ value, onChange }: { value: string; onChange:
               style={{ textAlign: 'center', color: '#4a6cf7', fontWeight: 500 }}
               onClick={() => { setShowNewModal(true); setOpen(false); }}
             >
-              ⊕ New category
+              ⊕ New Extension
             </button>
             <div style={{ borderBottom: '1px solid #e8ecf1' }} />
             <button
@@ -1971,13 +1971,13 @@ function ExtensionCategoryPicker({ value, onChange }: { value: string; onChange:
         <div className="modal-overlay" onClick={() => setShowNewModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ minWidth: 440 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ margin: 0 }}>New category</h3>
+              <h3 style={{ margin: 0 }}>New Extension</h3>
               <button className="btn-more" onClick={() => setShowNewModal(false)} style={{ fontSize: 20 }}>✕</button>
             </div>
 
-            <div className="npf-form-row" style={{ marginBottom: 16 }}>
-              <label className="npf-label" style={{ color: '#ef4444' }}>* Name</label>
-              <div className="npf-field">
+            <div className="form-group">
+              <label style={{ color: '#ef4444' }}>* Name</label>
+              <div style={{ position: 'relative' }}>
                 <input
                   value={catName}
                   onChange={(e) => setCatName(e.target.value.slice(0, 50))}
@@ -1985,66 +1985,69 @@ function ExtensionCategoryPicker({ value, onChange }: { value: string; onChange:
                   maxLength={50}
                   autoFocus
                 />
-                <span className="char-count">{catName.length} / 50</span>
+                <span style={{ position: 'absolute', right: 12, top: 8, fontSize: 11, color: '#a0aec0', pointerEvents: 'none' }}>{catName.length} / 50</span>
               </div>
             </div>
 
-            <div className="npf-form-row" style={{ marginBottom: 16 }}>
-              <label className="npf-label">Remark</label>
-              <div className="npf-field">
+            <div className="form-group">
+              <label>Remark</label>
+              <div style={{ position: 'relative' }}>
                 <textarea
                   value={catRemark}
                   onChange={(e) => setCatRemark(e.target.value.slice(0, 500))}
                   placeholder="Please enter"
                   rows={2}
                   maxLength={500}
+                  style={{ width: '100%', padding: '8px 12px', border: '1px solid #e8ecf1', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical' }}
                 />
-                <span className="char-count">{catRemark.length} / 500</span>
+                <span style={{ position: 'absolute', right: 12, top: 8, fontSize: 11, color: '#a0aec0', pointerEvents: 'none' }}>{catRemark.length} / 500</span>
               </div>
             </div>
 
-            <div className="npf-form-row" style={{ marginBottom: 16 }}>
-              <label className="npf-label">Extension</label>
-              <div className="npf-field">
-                <button
-                  className="add-platform-btn"
-                  style={{ borderStyle: 'dashed', borderColor: '#4a6cf7', color: '#4a6cf7' }}
-                  onClick={() => setShowExtPicker(!showExtPicker)}
-                >
-                  ⊕ Select extension
-                </button>
-                {showExtPicker && (
-                  <div style={{ marginTop: 8, border: '1px solid #e8ecf1', borderRadius: 8, overflow: 'hidden' }}>
-                    <div className="tags-dropdown-search">
-                      <span className="tags-search-icon">🔍</span>
-                      <input
-                        value={extSearch}
-                        onChange={(e) => setExtSearch(e.target.value)}
-                        placeholder="Search"
-                      />
-                    </div>
-                    <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                      {filteredExts.map((ext) => (
-                        <label key={ext.id} className="lang-checkbox-row" style={{ padding: '8px 12px' }}>
-                          <span style={{ flex: 1 }}>{ext.name}</span>
-                          <span style={{ color: catExtensions.includes(ext.id) ? '#4a6cf7' : '#d1d5db', cursor: 'pointer' }}
-                            onClick={() => {
-                              setCatExtensions((prev) =>
-                                prev.includes(ext.id) ? prev.filter((e) => e !== ext.id) : [...prev, ext.id]
-                              );
-                            }}
-                          >✓</span>
-                        </label>
-                      ))}
-                      {filteredExts.length === 0 && (
-                        <div className="tags-dropdown-empty">No data</div>
-                      )}
-                    </div>
+            <div className="form-group">
+              <label>Extension</label>
+              <button
+                className="add-platform-btn"
+                style={{ borderStyle: 'dashed', borderColor: '#4a6cf7', color: '#4a6cf7' }}
+                onClick={() => setShowExtPicker(!showExtPicker)}
+              >
+                ⊕ Select extension
+              </button>
+              {showExtPicker && (
+                <div style={{ marginTop: 8, border: '1px solid #e8ecf1', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid #e8ecf1' }}>
+                    <span style={{ fontSize: 14, color: '#a0aec0' }}>🔍</span>
+                    <input
+                      value={extSearch}
+                      onChange={(e) => setExtSearch(e.target.value)}
+                      placeholder="Search"
+                      style={{ border: 'none', outline: 'none', flex: 1, fontSize: 13, background: 'transparent' }}
+                    />
                   </div>
-                )}
-                <div className="field-hint" style={{ marginTop: 6 }}>
-                  Only install enabled extensions from [Extensions - Team&apos;s Extensions]
+                  <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                    {filteredExts.map((ext) => (
+                      <div
+                        key={ext.id}
+                        className="lang-checkbox-row"
+                        style={{ padding: '8px 12px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setCatExtensions((prev) =>
+                            prev.includes(ext.id) ? prev.filter((e) => e !== ext.id) : [...prev, ext.id]
+                          );
+                        }}
+                      >
+                        <span style={{ flex: 1 }}>{ext.name}</span>
+                        <span style={{ color: catExtensions.includes(ext.id) ? '#4a6cf7' : '#d1d5db' }}>✓</span>
+                      </div>
+                    ))}
+                    {filteredExts.length === 0 && (
+                      <div style={{ padding: 20, textAlign: 'center', color: '#a0aec0', fontSize: 13 }}>No data</div>
+                    )}
+                  </div>
                 </div>
+              )}
+              <div className="field-hint" style={{ marginTop: 6 }}>
+                Only install enabled extensions from [Extensions - Team&apos;s Extensions]
               </div>
             </div>
 
