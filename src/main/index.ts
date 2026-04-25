@@ -2,9 +2,11 @@ import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { setupIPC } from './ipc-handlers';
 import type { ProfileManager } from './services/profile-manager/profile-manager';
+import { LocalAPIServer } from './services/local-api/local-api-server';
 
 let mainWindow: BrowserWindow | null = null;
 let profileManager: ProfileManager | null = null;
+let localApiServer: LocalAPIServer | null = null;
 let isQuitting = false;
 
 function createWindow(): void {
@@ -33,10 +35,15 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
     const services = setupIPC();
     profileManager = services.profileManager;
+
+    // Start Local API Server on port 5015
+    localApiServer = new LocalAPIServer(profileManager, 'digitalid-local-api-key');
+    await localApiServer.start(5015);
+    console.log('Local API Server started on port 5015');
   } catch (err) {
     console.error('Failed to initialize services:', err);
   }
@@ -54,12 +61,14 @@ app.on('before-quit', (event) => {
   if (isQuitting || !profileManager) return;
   isQuitting = true;
   event.preventDefault();
-  profileManager.closeAllProfiles()
-    .catch(() => {})
-    .finally(() => {
-      profileManager = null;
-      app.quit();
-    });
+  Promise.all([
+    profileManager?.closeAllProfiles().catch(() => {}),
+    localApiServer?.stop().catch(() => {}),
+  ]).finally(() => {
+    profileManager = null;
+    localApiServer = null;
+    app.quit();
+  });
 });
 
 app.on('window-all-closed', () => {
