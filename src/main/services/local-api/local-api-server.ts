@@ -105,6 +105,25 @@ export class LocalAPIServer {
   private setupRoutes(): void {
     const router = Router();
 
+    // Fingerprint check page — no auth needed (served to browser profiles)
+    this.app.get('/fingerprint-check', (_req: Request, res: Response) => {
+      const htmlPath = require('path');
+      // Try multiple paths for dev and production
+      const candidates = [
+        htmlPath.join(__dirname, 'fingerprint-check.html'),
+        htmlPath.join(__dirname, '..', '..', '..', 'src', 'main', 'services', 'local-api', 'fingerprint-check.html'),
+      ];
+      for (const p of candidates) {
+        try {
+          if (require('fs').existsSync(p)) {
+            res.sendFile(p);
+            return;
+          }
+        } catch { /* continue */ }
+      }
+      res.status(404).send('Fingerprint check page not found');
+    });
+
     // API key authentication middleware for all /api/v1/ routes
     router.use(this.authenticateApiKey.bind(this));
 

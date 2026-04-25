@@ -233,6 +233,16 @@ export class ProfileManager {
       // Ignore cookie restore errors
     }
 
+    // Open fingerprint check page as first tab
+    try {
+      const firstPage = context.pages()[0];
+      if (firstPage) {
+        await firstPage.goto('http://127.0.0.1:5015/fingerprint-check', { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+      }
+    } catch {
+      // Ignore — local API server may not be running
+    }
+
     // Restore saved tabs (open URLs from last session)
     try {
       const tabsRow = this.db
