@@ -252,10 +252,17 @@ export class ProfileManager {
         const urls: string[] = JSON.parse(tabsRow.data.toString('utf-8'));
         if (Array.isArray(urls) && urls.length > 0) {
           for (const url of urls) {
-            // Skip fingerprint check URL to avoid duplicate
-            if (url.includes('fingerprint-check')) continue;
-            const newPage = await context.newPage();
-            await newPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            // Skip fingerprint check URL and about:blank
+            if (url.includes('fingerprint-check') || url === 'about:blank') continue;
+            try {
+              const newPage = await context.newPage();
+              // Use 'commit' waitUntil — faster, just waits for server response
+              await newPage.goto(url, { waitUntil: 'commit', timeout: 30000 });
+            } catch {
+              // If goto fails, page stays at about:blank — that's ok
+            }
+            // Small delay between tabs to avoid overwhelming proxy/network
+            await new Promise((r) => setTimeout(r, 500));
           }
         }
       }
