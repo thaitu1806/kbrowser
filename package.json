@@ -1,20 +1,55 @@
 {
-  "name": "digital-identity-management",
+  "name": "kens-browser-im",
   "version": "0.1.0",
-  "description": "Hệ thống Quản lý Danh tính Số - Desktop application for managing isolated browser profiles",
+  "description": "Ken's Browser IM - Desktop application for managing isolated browser profiles",
   "main": "dist/main/main/index.js",
   "private": true,
   "scripts": {
     "dev": "vite",
     "dev:electron": "npm run build:main && electron .",
     "postinstall": "electron-rebuild",
-    "build": "tsc && vite build && npm run build:main",
+    "build": "npm run build:renderer && npm run build:main",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",
     "preview": "vite preview",
     "electron": "electron .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.ken.browser-im",
+    "productName": "Ken's Browser IM",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "index.html",
+      "src/main/services/local-api/fingerprint-check.html"
+    ],
+    "extraResources": [
+      {
+        "from": "src/main/services/local-api/fingerprint-check.html",
+        "to": "fingerprint-check.html"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": null,
+      "signAndEditExecutable": false,
+      "sign": null
+    },
+    "portable": {
+      "artifactName": "KensBrowserIM-${version}-portable.exe"
+    }
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -35,6 +70,7 @@
     "@types/supertest": "^6.0.2",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
     "fast-check": "^3.23.2",
     "supertest": "^7.0.0",
     "typescript": "^5.6.3",
