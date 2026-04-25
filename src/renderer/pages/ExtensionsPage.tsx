@@ -319,15 +319,40 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
             </div>
           </>
         ) : (
-          /* Chrome Web Store URL */
+          /* Chrome Web Store */
           <div className="npf-form-row" style={{ marginBottom: 16 }}>
-            <label className="npf-label">Store URL</label>
+            <label className="npf-label" style={{ color: '#ef4444' }}>* URL of Extension</label>
             <div className="npf-field">
               <input
                 value={storeUrl}
                 onChange={(e) => setStoreUrl(e.target.value)}
-                placeholder="https://chrome.google.com/webstore/detail/..."
+                placeholder="Chrome Web Store URL"
+                style={{ borderColor: storeUrl && !storeUrl.includes('chromewebstore.google.com') && !storeUrl.includes('chrome.google.com') ? '#ef4444' : undefined }}
               />
+              {storeUrl && !storeUrl.includes('chromewebstore.google.com') && !storeUrl.includes('chrome.google.com') && (
+                <div style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>Chrome Web Store URL</div>
+              )}
+              <div style={{ marginTop: 12, padding: 16, background: '#f7f8fc', borderRadius: 8, fontSize: 13, color: '#6b7b8d' }}>
+                <div style={{ marginBottom: 8, fontWeight: 500, color: '#1e2a3a' }}>Note:</div>
+                <div>1. Please use a network that can access the Chrome Web Store to add the extension.</div>
+                <div>2. This extension is provided by a third party; all rights are reserved by them.</div>
+                <div style={{ marginBottom: 8 }}>3. Visit <a href="https://chromewebstore.google.com" target="_blank" rel="noopener noreferrer" style={{ color: '#4a6cf7' }}>Chrome Web Store</a>, and copy the link of the extension you want to add.</div>
+                <div style={{ background: '#fff', border: '1px solid #e8ecf1', borderRadius: 8, padding: 10, marginTop: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ color: '#a0aec0' }}>→</span>
+                    <span style={{ color: '#a0aec0' }}>⟳</span>
+                    <div style={{ flex: 1, background: '#f0f2f5', borderRadius: 20, padding: '4px 12px', fontSize: 12, color: '#6b7b8d', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span>🔒</span> chromewebstore.google.com/detail/volume-master/jghecgabfgfdldnmbfkhmffcabddioke
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>🌐 chrome web store</span>
+                    <span style={{ color: '#a0aec0' }}>Discover</span>
+                    <span style={{ color: '#4a6cf7', borderBottom: '2px solid #4a6cf7', paddingBottom: 2 }}>Extensions</span>
+                    <span style={{ color: '#a0aec0' }}>Themes</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
