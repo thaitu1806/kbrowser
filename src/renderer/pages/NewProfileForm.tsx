@@ -1326,14 +1326,10 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             <div className="section-label">Advanced</div>
 
             <FormRow label="Extension">
-              <select
+              <ExtensionCategoryPicker
                 value={form.extensionMode}
-                onChange={(e) => update('extensionMode', e.target.value)}
-              >
-                <option value="team">Use team&apos;s extensions</option>
-                <option value="none">No extensions</option>
-                <option value="custom">Custom</option>
-              </select>
+                onChange={(v) => update('extensionMode', v)}
+              />
               <div className="field-hint">
                 The enabled extensions from [Extensions - Team&apos;s Extensions] will be installed in the profile.
               </div>
@@ -1867,6 +1863,194 @@ function LanguagePicker({ selected, onChange }: { selected: string[]; onChange: 
             <div className="form-actions">
               <button className="btn btn-primary" onClick={handleOk}>OK</button>
               <button className="btn" onClick={() => setShowModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExtensionCategoryPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [categories, setCategories] = useState<Array<{ name: string; remark: string; extensions: string[] }>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('extCategories') || '[]');
+    } catch { return []; }
+  });
+  const [catName, setCatName] = useState('');
+  const [catRemark, setCatRemark] = useState('');
+  const [catExtensions, setCatExtensions] = useState<string[]>([]);
+  const [extSearch, setExtSearch] = useState('');
+  const [showExtPicker, setShowExtPicker] = useState(false);
+  const [availableExts, setAvailableExts] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Load extensions from backend
+  useEffect(() => {
+    const load = async () => {
+      const api = typeof window !== 'undefined' ? window.electronAPI : null;
+      if (api?.listExtensions) {
+        try {
+          const exts = await api.listExtensions();
+          setAvailableExts(exts.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name })));
+        } catch { /* ignore */ }
+      }
+    };
+    load();
+  }, []);
+
+  const displayValue = value === 'team' ? "Use team's extensions" : value === 'none' ? 'No extensions' : value;
+
+  const handleSaveCategory = () => {
+    if (!catName.trim()) return;
+    const newCat = { name: catName.trim(), remark: catRemark, extensions: catExtensions };
+    const updated = [...categories, newCat];
+    setCategories(updated);
+    localStorage.setItem('extCategories', JSON.stringify(updated));
+    onChange(catName.trim());
+    setCatName('');
+    setCatRemark('');
+    setCatExtensions([]);
+    setShowNewModal(false);
+    setOpen(false);
+  };
+
+  const filteredExts = availableExts.filter((e) =>
+    e.name.toLowerCase().includes(extSearch.toLowerCase())
+  );
+
+  return (
+    <div className="tags-dropdown-wrapper" style={{ width: '100%' }}>
+      <div
+        className="group-select-field"
+        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        onClick={() => setOpen(!open)}
+      >
+        <span style={{ color: value ? undefined : '#a0aec0' }}>{displayValue || 'Select'}</span>
+        <span style={{ color: '#a0aec0', fontSize: 10 }}>{open ? '∧' : '∨'}</span>
+      </div>
+
+      {open && (
+        <>
+          <div className="os-dropdown-backdrop" onClick={() => setOpen(false)} />
+          <div className="tags-dropdown" style={{ width: '100%', minWidth: 0 }}>
+            <button
+              className="tags-dropdown-item"
+              style={{ textAlign: 'center', color: '#4a6cf7', fontWeight: 500 }}
+              onClick={() => { setShowNewModal(true); setOpen(false); }}
+            >
+              ⊕ New category
+            </button>
+            <div style={{ borderBottom: '1px solid #e8ecf1' }} />
+            <button
+              className={`tags-dropdown-item ${value === 'team' ? 'selected' : ''}`}
+              style={{ background: value === 'team' ? '#eef2ff' : undefined }}
+              onClick={() => { onChange('team'); setOpen(false); }}
+            >
+              Use team&apos;s extensions
+            </button>
+            {categories.length === 0 && (
+              <div className="tags-dropdown-empty">No data</div>
+            )}
+            {categories.map((cat) => (
+              <button
+                key={cat.name}
+                className={`tags-dropdown-item ${value === cat.name ? 'selected' : ''}`}
+                style={{ background: value === cat.name ? '#eef2ff' : undefined }}
+                onClick={() => { onChange(cat.name); setOpen(false); }}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {showNewModal && (
+        <div className="modal-overlay" onClick={() => setShowNewModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ minWidth: 440 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>New category</h3>
+              <button className="btn-more" onClick={() => setShowNewModal(false)} style={{ fontSize: 20 }}>✕</button>
+            </div>
+
+            <div className="npf-form-row" style={{ marginBottom: 16 }}>
+              <label className="npf-label" style={{ color: '#ef4444' }}>* Name</label>
+              <div className="npf-field">
+                <input
+                  value={catName}
+                  onChange={(e) => setCatName(e.target.value.slice(0, 50))}
+                  placeholder="Please enter"
+                  maxLength={50}
+                  autoFocus
+                />
+                <span className="char-count">{catName.length} / 50</span>
+              </div>
+            </div>
+
+            <div className="npf-form-row" style={{ marginBottom: 16 }}>
+              <label className="npf-label">Remark</label>
+              <div className="npf-field">
+                <textarea
+                  value={catRemark}
+                  onChange={(e) => setCatRemark(e.target.value.slice(0, 500))}
+                  placeholder="Please enter"
+                  rows={2}
+                  maxLength={500}
+                />
+                <span className="char-count">{catRemark.length} / 500</span>
+              </div>
+            </div>
+
+            <div className="npf-form-row" style={{ marginBottom: 16 }}>
+              <label className="npf-label">Extension</label>
+              <div className="npf-field">
+                <button
+                  className="add-platform-btn"
+                  style={{ borderStyle: 'dashed', borderColor: '#4a6cf7', color: '#4a6cf7' }}
+                  onClick={() => setShowExtPicker(!showExtPicker)}
+                >
+                  ⊕ Select extension
+                </button>
+                {showExtPicker && (
+                  <div style={{ marginTop: 8, border: '1px solid #e8ecf1', borderRadius: 8, overflow: 'hidden' }}>
+                    <div className="tags-dropdown-search">
+                      <span className="tags-search-icon">🔍</span>
+                      <input
+                        value={extSearch}
+                        onChange={(e) => setExtSearch(e.target.value)}
+                        placeholder="Search"
+                      />
+                    </div>
+                    <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                      {filteredExts.map((ext) => (
+                        <label key={ext.id} className="lang-checkbox-row" style={{ padding: '8px 12px' }}>
+                          <span style={{ flex: 1 }}>{ext.name}</span>
+                          <span style={{ color: catExtensions.includes(ext.id) ? '#4a6cf7' : '#d1d5db', cursor: 'pointer' }}
+                            onClick={() => {
+                              setCatExtensions((prev) =>
+                                prev.includes(ext.id) ? prev.filter((e) => e !== ext.id) : [...prev, ext.id]
+                              );
+                            }}
+                          >✓</span>
+                        </label>
+                      ))}
+                      {filteredExts.length === 0 && (
+                        <div className="tags-dropdown-empty">No data</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <div className="field-hint" style={{ marginTop: 6 }}>
+                  Only install enabled extensions from [Extensions - Team&apos;s Extensions]
+                </div>
+              </div>
+            </div>
+
+            <div className="form-actions">
+              <button className="btn btn-primary" onClick={handleSaveCategory} disabled={!catName.trim()}>OK</button>
+              <button className="btn" onClick={() => setShowNewModal(false)}>Cancel</button>
             </div>
           </div>
         </div>

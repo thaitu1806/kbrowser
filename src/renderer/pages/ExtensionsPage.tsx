@@ -7,13 +7,9 @@ export default function ExtensionsPage() {
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showUploadForm, setShowUploadForm] = useState(false);
-  const [showStoreForm, setShowStoreForm] = useState(false);
-  const [storeUrl, setStoreUrl] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
   const [assignExtId, setAssignExtId] = useState<string | null>(null);
   const [assignProfileIds, setAssignProfileIds] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadExtensions = useCallback(async () => {
     if (!api) return;
@@ -29,39 +25,6 @@ export default function ExtensionsPage() {
   }, []);
 
   useEffect(() => { loadExtensions(); }, [loadExtensions]);
-
-  const handleUpload = async () => {
-    if (!api) return;
-    const fileInput = fileInputRef.current;
-    if (!fileInput?.files?.length) {
-      setError('Please select a .zip file');
-      return;
-    }
-
-    const file = fileInput.files[0];
-    setUploading(true);
-    setError(null);
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const fileData = Array.from(new Uint8Array(arrayBuffer));
-      await api.uploadExtension(fileData, file.name);
-      await loadExtensions();
-      setShowUploadForm(false);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to upload extension');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDownloadFromStore = () => {
-    if (!storeUrl.trim()) return;
-    // Store download is not yet implemented in backend — show info
-    setError('Chrome Store download is not yet supported. Please upload a .zip file instead.');
-    setShowStoreForm(false);
-    setStoreUrl('');
-  };
 
   const handleRemove = async (id: string) => {
     if (!api) return;
@@ -90,8 +53,8 @@ export default function ExtensionsPage() {
   if (loading) {
     return (
       <div className="page">
-        <h2>Quản lý Tiện ích mở rộng</h2>
-        <div className="empty-state"><p>Đang tải...</p></div>
+        <h2>Extensions</h2>
+        <div className="empty-state"><p>Loading...</p></div>
       </div>
     );
   }
@@ -99,11 +62,8 @@ export default function ExtensionsPage() {
   return (
     <div className="page">
       <div className="section-header">
-        <h2>Quản lý Tiện ích mở rộng</h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button className="btn btn-primary" onClick={() => setShowUploadForm(true)}>Tải lên .zip</button>
-          <button className="btn" onClick={() => setShowStoreForm(true)}>Tải từ Chrome Store</button>
-        </div>
+        <h2>Extensions</h2>
+        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>+ Add Extension</button>
       </div>
 
       {error && (
@@ -115,18 +75,20 @@ export default function ExtensionsPage() {
 
       {extensions.length === 0 ? (
         <div className="empty-state">
-          <p>Chưa có tiện ích nào.</p>
+          <p style={{ fontSize: 32, marginBottom: 8 }}>🧩</p>
+          <p>No extensions yet.</p>
+          <p style={{ fontSize: 12, color: '#a0aec0', marginTop: 8 }}>Click "+ Add Extension" to upload one.</p>
         </div>
       ) : (
         <div className="table-container">
           <table>
             <thead>
               <tr>
-                <th>Tên</th>
-                <th>Phiên bản</th>
-                <th>Nguồn</th>
-                <th>Hồ sơ đã gán</th>
-                <th>Hành động</th>
+                <th>Name</th>
+                <th>Version</th>
+                <th>Source</th>
+                <th>Assigned Profiles</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -141,17 +103,15 @@ export default function ExtensionsPage() {
                   </td>
                   <td>
                     {ext.assignedProfiles.length > 0 ? (
-                      <span style={{ fontSize: '0.8rem' }}>{ext.assignedProfiles.join(', ')}</span>
+                      <span style={{ fontSize: 12 }}>{ext.assignedProfiles.join(', ')}</span>
                     ) : (
-                      <span style={{ color: '#999' }}>Chưa gán</span>
+                      <span style={{ color: '#999' }}>Not assigned</span>
                     )}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '0.25rem' }}>
-                      <button className="btn btn-sm" onClick={() => { setAssignExtId(ext.id); setAssignProfileIds(''); }}>
-                        Gán
-                      </button>
-                      <button className="btn btn-danger btn-sm" onClick={() => handleRemove(ext.id)}>Xóa</button>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-sm" onClick={() => { setAssignExtId(ext.id); setAssignProfileIds(''); }}>Assign</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => handleRemove(ext.id)}>Remove</button>
                     </div>
                   </td>
                 </tr>
@@ -161,68 +121,238 @@ export default function ExtensionsPage() {
         </div>
       )}
 
-      {/* Upload Form */}
-      {showUploadForm && (
-        <div className="modal-overlay" onClick={() => setShowUploadForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Tải lên tiện ích (.zip)</h3>
-            <div className="form-group">
-              <label htmlFor="ext-file">File .zip</label>
-              <input id="ext-file" type="file" accept=".zip" ref={fileInputRef} />
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-primary" onClick={handleUpload} disabled={uploading}>
-                {uploading ? 'Đang tải...' : 'Tải lên'}
-              </button>
-              <button className="btn" onClick={() => setShowUploadForm(false)}>Hủy</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Store Download Form */}
-      {showStoreForm && (
-        <div className="modal-overlay" onClick={() => setShowStoreForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Tải từ Chrome Web Store</h3>
-            <div className="form-group">
-              <label htmlFor="store-url">URL Chrome Web Store</label>
-              <input
-                id="store-url"
-                value={storeUrl}
-                onChange={(e) => setStoreUrl(e.target.value)}
-                placeholder="https://chrome.google.com/webstore/detail/..."
-              />
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-primary" onClick={handleDownloadFromStore}>Tải về</button>
-              <button className="btn" onClick={() => setShowStoreForm(false)}>Hủy</button>
-            </div>
-          </div>
-        </div>
+      {/* Add Extension Modal */}
+      {showAddModal && (
+        <AddExtensionModal
+          onClose={() => setShowAddModal(false)}
+          onSuccess={() => { setShowAddModal(false); loadExtensions(); }}
+        />
       )}
 
       {/* Assign Dialog */}
       {assignExtId && (
         <div className="modal-overlay" onClick={() => setAssignExtId(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Gán tiện ích cho hồ sơ</h3>
+            <h3>Assign extension to profiles</h3>
             <div className="form-group">
-              <label htmlFor="assign-profiles">Profile IDs (phân cách bằng dấu phẩy)</label>
+              <label htmlFor="assign-profiles">Profile IDs (comma separated)</label>
               <input
                 id="assign-profiles"
                 value={assignProfileIds}
                 onChange={(e) => setAssignProfileIds(e.target.value)}
-                placeholder="p-1, p-2, p-3"
+                placeholder="profile-id-1, profile-id-2"
               />
             </div>
             <div className="form-actions">
-              <button className="btn btn-primary" onClick={handleAssign}>Gán</button>
-              <button className="btn" onClick={() => setAssignExtId(null)}>Hủy</button>
+              <button className="btn btn-primary" onClick={handleAssign}>Assign</button>
+              <button className="btn" onClick={() => setAssignExtId(null)}>Cancel</button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [type, setType] = useState<'upload' | 'store'>('upload');
+  const [extName, setExtName] = useState('');
+  const [introduction, setIntroduction] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [storeUrl, setStoreUrl] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const iconInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      setFile(f);
+      if (!extName) {
+        setExtName(f.name.replace('.zip', '').slice(0, 20));
+      }
+    }
+  };
+
+  const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      const reader = new FileReader();
+      reader.onload = () => setIconPreview(reader.result as string);
+      reader.readAsDataURL(f);
+    }
+  };
+
+  const handleIconDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const f = e.dataTransfer.files?.[0];
+    if (f && (f.type === 'image/png' || f.type === 'image/jpeg' || f.type === 'image/jpg')) {
+      const reader = new FileReader();
+      reader.onload = () => setIconPreview(reader.result as string);
+      reader.readAsDataURL(f);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!extName.trim()) {
+      setError('Extension name is required');
+      return;
+    }
+
+    if (type === 'upload') {
+      if (!file) {
+        setError('Please select a .zip file');
+        return;
+      }
+      setUploading(true);
+      setError(null);
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const fileData = Array.from(new Uint8Array(arrayBuffer));
+        if (api) {
+          await api.uploadExtension(fileData, file.name);
+        }
+        onSuccess();
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to upload extension');
+      } finally {
+        setUploading(false);
+      }
+    } else {
+      if (!storeUrl.trim()) {
+        setError('Please enter a Chrome Web Store URL');
+        return;
+      }
+      setError('Chrome Web Store download is not yet supported. Please use Upload File.');
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ minWidth: 500, maxWidth: 560 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 18 }}>Add extension</h3>
+          <button className="btn-more" onClick={onClose} style={{ fontSize: 20 }}>✕</button>
+        </div>
+
+        {/* Type toggle */}
+        <div className="npf-form-row" style={{ marginBottom: 20 }}>
+          <label className="npf-label">Type</label>
+          <div className="npf-field">
+            <div className="toggle-group">
+              <button className={`toggle-btn ${type === 'upload' ? 'active' : ''}`} onClick={() => setType('upload')}>Upload File</button>
+              <button className={`toggle-btn ${type === 'store' ? 'active' : ''}`} onClick={() => setType('store')}>Chrome Web Store</button>
+            </div>
+          </div>
+        </div>
+
+        {type === 'upload' ? (
+          <>
+            {/* Installation package */}
+            <div className="npf-form-row" style={{ marginBottom: 16 }}>
+              <label className="npf-label">Installation package</label>
+              <div className="npf-field">
+                <button
+                  className="btn"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#4a6cf7', borderColor: '#4a6cf7' }}
+                  onClick={handleFileSelect}
+                >
+                  ☁️ Click to upload
+                </button>
+                <input ref={fileInputRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={handleFileChange} />
+                {file && <div style={{ marginTop: 6, fontSize: 12, color: '#1e2a3a' }}>📦 {file.name}</div>}
+                <div className="field-hint" style={{ marginTop: 6 }}>
+                  Support zip format, limit 60M<br />
+                  If the extension file is in crx format, change the file suffix to rar first, unzip it and recompress it to zip format
+                </div>
+              </div>
+            </div>
+
+            {/* Icon */}
+            <div className="npf-form-row" style={{ marginBottom: 16 }}>
+              <label className="npf-label">Icon</label>
+              <div className="npf-field">
+                <div
+                  className="ext-icon-upload"
+                  onClick={() => iconInputRef.current?.click()}
+                  onDrop={handleIconDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  {iconPreview ? (
+                    <img src={iconPreview} alt="icon" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 24, color: '#a0c4ff' }}>⬆</span>
+                      <span style={{ fontSize: 11, color: '#a0aec0', textAlign: 'center' }}>Drag and drop images or click to upload</span>
+                    </>
+                  )}
+                </div>
+                <input ref={iconInputRef} type="file" accept=".jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleIconChange} />
+                <div className="field-hint" style={{ marginTop: 6 }}>
+                  Optional, at least 60*60 pixels, ratio 1:1, support jpg/jpeg/png format, limit 1M
+                </div>
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Chrome Web Store URL */
+          <div className="npf-form-row" style={{ marginBottom: 16 }}>
+            <label className="npf-label">Store URL</label>
+            <div className="npf-field">
+              <input
+                value={storeUrl}
+                onChange={(e) => setStoreUrl(e.target.value)}
+                placeholder="https://chrome.google.com/webstore/detail/..."
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Extension Name */}
+        <div className="npf-form-row" style={{ marginBottom: 16 }}>
+          <label className="npf-label" style={{ color: '#ef4444' }}>* Extension Name</label>
+          <div className="npf-field">
+            <input
+              value={extName}
+              onChange={(e) => setExtName(e.target.value.slice(0, 20))}
+              placeholder="Required, please fill in the extension name"
+              maxLength={20}
+            />
+            <span className="char-count">{extName.length} / 20</span>
+          </div>
+        </div>
+
+        {/* Introduction */}
+        <div className="npf-form-row" style={{ marginBottom: 20 }}>
+          <label className="npf-label">Introduction</label>
+          <div className="npf-field">
+            <input
+              value={introduction}
+              onChange={(e) => setIntroduction(e.target.value.slice(0, 200))}
+              placeholder="Optional, please fill in the brief description of the extension"
+              maxLength={200}
+            />
+            <span className="char-count">{introduction.length} / 200</span>
+          </div>
+        </div>
+
+        {error && (
+          <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>⚠ {error}</div>
+        )}
+
+        <div className="form-actions">
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={uploading}>
+            {uploading ? '⏳ Uploading...' : 'OK'}
+          </button>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
     </div>
   );
 }

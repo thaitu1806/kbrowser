@@ -2004,3 +2004,23 @@ tr:hover { background: #f8faff; }
   color: var(--primary-hover);
   text-decoration: underline;
 }
+
+/* Extension icon upload */
+.ext-icon-upload {
+  width: 100px;
+  height: 100px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  background: #fafbfd;
+}
+
+.ext-icon-upload:hover {
+  border-color: var(--primary);
+}
