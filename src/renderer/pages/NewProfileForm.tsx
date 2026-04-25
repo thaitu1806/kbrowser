@@ -1403,22 +1403,32 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           </div>
           <div className="overview-table">
             <OverviewRow label="Browser" value={`${form.browser === 'chromium' ? 'SunBrowser' : 'FlowerBrowser'} [${form.browserVersion}]`} />
+            <OverviewRow label="OS" value={`${form.os.charAt(0).toUpperCase() + form.os.slice(1)} [${form.osVersion}]`} />
             <OverviewRow label="User-Agent" value={form.userAgent} />
+            <OverviewRow label="Proxy" value={form.proxyType === 'none' ? 'No proxy' : `${form.proxyType.toUpperCase()} ${form.proxyHost}:${form.proxyPort}`} />
             <OverviewRow label="WebRTC" value={form.webrtc === 'disabled' ? 'Disabled' : form.webrtc === 'disable-udp' ? 'Disable UDP' : form.webrtc.charAt(0).toUpperCase() + form.webrtc.slice(1)} />
-            <OverviewRow label="Timezone" value={form.timezone === 'based-on-ip' ? 'Based on IP' : form.timezone === 'real' ? 'Real' : 'Custom'} />
-            <OverviewRow label="Location" value={`${form.locationAsk ? '[Ask]' : '[Allow]'} ${form.location === 'based-on-ip' ? 'Based on IP' : form.location === 'custom' ? 'Custom' : 'Block'}`} />
-            <OverviewRow label="Language" value={form.language === 'based-on-ip' ? 'Based on IP' : form.language === 'real' ? 'Real' : 'Custom'} />
-            <OverviewRow label="Display language" value={form.displayLanguage === 'based-on-language' ? 'Based on Language' : form.displayLanguage === 'real' ? 'Real' : 'Custom'} />
-            <OverviewRow label="Screen Resolution" value={form.screenResolution === 'based-on-ua' ? 'Based on User-Agent' : form.screenResolution === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="Timezone" value={form.timezone === 'based-on-ip' ? 'Based on IP' : form.timezone === 'real' ? 'Real' : form.customTimezone} />
+            <OverviewRow label="Location" value={`${form.locationAsk ? '[Ask]' : '[Allow]'} ${form.location === 'based-on-ip' ? 'Based on IP' : form.location === 'custom' ? `${form.locationLatitude || '—'}, ${form.locationLongitude || '—'}` : 'Block'}`} />
+            <OverviewRow label="Language" value={form.language === 'based-on-ip' ? 'Based on IP' : `[${form.customLanguages.join(', ')}]`} />
+            <OverviewRow label="Display language" value={form.displayLanguage === 'based-on-language' ? 'Based on Language' : form.displayLanguage === 'real' ? 'Real' : form.customDisplayLanguage} />
+            <OverviewRow label="Screen Resolution" value={form.screenResolutionMode === 'random' ? 'Random' : form.screenResolutionMode === 'predefined' ? form.screenResolutionValue : `${form.customWidth} x ${form.customHeight}`} />
             <OverviewRow label="Fonts" value={form.fonts === 'default' ? 'Default' : 'Custom'} />
             <OverviewRow label="Canvas" value={form.canvasNoise ? 'Noise' : 'Real'} />
             <OverviewRow label="WebGL" value={form.webglNoise ? 'Noise' : 'Real'} />
             <OverviewRow label="Audio" value={form.audioNoise ? 'Noise' : 'Real'} />
-            <OverviewRow label="CPU" value={`${form.cpuCores} cores`} />
-            <OverviewRow label="RAM" value={`${form.ramSize} GB`} />
-            <OverviewRow label="WebGL Meta" value={form.webglMeta === 'real' ? 'Real' : 'Custom'} />
+            <OverviewRow label="Media device" value={form.mediaDevice ? 'On' : 'Off'} />
+            <OverviewRow label="ClientRects" value={form.clientRects ? 'On' : 'Off'} />
+            <OverviewRow label="SpeechVoices" value={form.speechVoices ? 'On' : 'Off'} />
+            <OverviewRow label="CPU" value={form.cpuMode === 'real' ? 'Real' : `${form.cpuCores} cores`} />
+            <OverviewRow label="RAM" value={form.ramMode === 'real' ? 'Real' : `${form.ramSize} GB`} />
+            <OverviewRow label="Device name" value={form.deviceNameMode === 'real' ? 'Real' : form.deviceName} />
+            <OverviewRow label="MAC Address" value={form.macAddressMode === 'real' ? 'Real' : form.macAddress} />
+            <OverviewRow label="WebGL Meta" value={form.webglMeta === 'real' ? 'Real' : form.webglVendor} />
             <OverviewRow label="WebGPU" value={form.webgpu === 'based-on-webgl' ? 'Based on WebGL' : form.webgpu === 'real' ? 'Real' : 'Disabled'} />
             <OverviewRow label="Do Not Track" value={form.doNotTrack === 'default' ? 'Default' : form.doNotTrack === 'open' ? 'Open' : 'Close'} />
+            <OverviewRow label="Port scan" value={form.portScanProtection === 'enable' ? 'Enable' : 'Close'} />
+            <OverviewRow label="HW acceleration" value={form.hardwareAcceleration === 'default' ? 'Default' : form.hardwareAcceleration === 'open' ? 'Open' : 'Close'} />
+            <OverviewRow label="TLS" value={form.disableTLS === 'close' ? 'Close' : 'Open'} />
           </div>
           <div className="overview-footer">
             Set default values in <a href="#">Preferences</a>.
