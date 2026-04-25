@@ -3,317 +3,119 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🛡️ DigitalID — Fingerprint Check</title>
+<title>🛡️ DigitalID — Fingerprint Dashboard</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1e2a3a; padding: 20px; }
-.header { text-align: center; padding: 20px 0; margin-bottom: 20px; }
-.header h1 { font-size: 24px; color: #4a6cf7; }
-.header p { color: #6b7b8d; font-size: 13px; margin-top: 4px; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 1200px; margin: 0 auto; }
-.card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.card h2 { font-size: 15px; font-weight: 600; color: #4a6cf7; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-.card h2 .icon { font-size: 18px; }
-.row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f2f5; font-size: 13px; }
-.row:last-child { border-bottom: none; }
-.label { color: #6b7b8d; min-width: 140px; }
-.value { color: #1e2a3a; text-align: right; word-break: break-all; max-width: 400px; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; }
-.value.ok { color: #22c55e; }
-.value.warn { color: #f59e0b; }
-.value.bad { color: #ef4444; }
-.full { grid-column: 1 / -1; }
-.canvas-box { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
-.canvas-box canvas { border: 1px solid #e8ecf1; border-radius: 6px; }
-.status-bar { max-width: 1200px; margin: 0 auto 16px; background: #fff; border-radius: 12px; padding: 16px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; justify-content: space-between; align-items: center; }
-.status-bar .score { font-size: 28px; font-weight: 700; }
-.status-bar .score.good { color: #22c55e; }
-.status-bar .score.medium { color: #f59e0b; }
-.status-bar .score.poor { color: #ef4444; }
-.checks { display: flex; gap: 16px; }
-.check-item { text-align: center; }
-.check-item .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-bottom: 4px; }
-.check-item .dot.pass { background: #22c55e; }
-.check-item .dot.fail { background: #ef4444; }
-.check-item .dot.warn { background: #f59e0b; }
-.check-item span { font-size: 11px; color: #6b7b8d; display: block; }
-#loading { text-align: center; padding: 40px; font-size: 16px; color: #6b7b8d; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1e2a3a; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.header { background: #fff; border-bottom: 1px solid #e8ecf1; padding: 10px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.header h1 { font-size: 16px; color: #4a6cf7; white-space: nowrap; }
+.header .subtitle { font-size: 12px; color: #6b7b8d; }
+
+.nav { display: flex; gap: 0; background: #fff; border-bottom: 1px solid #e8ecf1; flex-shrink: 0; overflow-x: auto; padding: 0 12px; }
+.nav-group { display: flex; gap: 0; }
+.nav-group-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: #a0aec0; padding: 8px 12px 0; letter-spacing: 0.5px; white-space: nowrap; align-self: center; }
+.nav button { padding: 10px 14px; border: none; background: none; font-size: 12px; color: #6b7b8d; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.15s; }
+.nav button:hover { color: #1e2a3a; background: #f7f8fc; }
+.nav button.active { color: #4a6cf7; border-bottom-color: #4a6cf7; font-weight: 600; }
+.nav button.cat-comprehensive { color: #4a6cf7; }
+.nav button.cat-specific { color: #f59e0b; }
+.nav button.cat-bot { color: #ef4444; }
+
+.content { flex: 1; position: relative; }
+.content iframe { width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0; }
+
+.loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #6b7b8d; }
+.loading .spinner { font-size: 32px; margin-bottom: 8px; animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.info-bar { background: #eef2ff; padding: 6px 20px; font-size: 11px; color: #4a6cf7; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.info-bar .dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+
+.quick-info { display: flex; gap: 16px; margin-left: auto; font-size: 11px; color: #6b7b8d; }
+.quick-info span { display: flex; align-items: center; gap: 4px; }
 </style>
 </head>
 <body>
+
 <div class="header">
-  <h1>🛡️ DigitalID — Fingerprint Check</h1>
-  <p>Verify your browser profile fingerprint configuration</p>
+  <h1>🛡️ DigitalID</h1>
+  <span class="subtitle">Fingerprint Verification Dashboard</span>
 </div>
-<div id="loading">⏳ Analyzing fingerprint...</div>
-<div id="content" style="display:none">
-<div class="status-bar">
-  <div>
-    <div style="font-size:13px;color:#6b7b8d">Fingerprint Score</div>
-    <div class="score" id="score">—</div>
+
+<div class="info-bar">
+  <span class="dot"></span>
+  <span>Profile browser detected</span>
+  <div class="quick-info">
+    <span>🌐 <span id="q-ua"></span></span>
+    <span>🖥️ <span id="q-screen"></span></span>
+    <span>⚙️ <span id="q-cpu"></span> cores</span>
+    <span>💾 <span id="q-ram"></span> GB</span>
   </div>
-  <div class="checks" id="checks"></div>
 </div>
-<div class="grid">
-  <!-- Navigator -->
-  <div class="card">
-    <h2><span class="icon">🌐</span> Navigator</h2>
-    <div id="nav-rows"></div>
-  </div>
 
-  <!-- Screen & Display -->
-  <div class="card">
-    <h2><span class="icon">🖥️</span> Screen & Display</h2>
-    <div id="screen-rows"></div>
-  </div>
+<div class="nav" id="nav">
+  <!-- Comprehensive -->
+  <span class="nav-group-label">📊 Comprehensive</span>
+  <button class="active" data-url="https://browserleaks.com" data-name="BrowserLeaks">BrowserLeaks</button>
+  <button data-url="https://abrahamjuliot.github.io/creepjs/" data-name="CreepJS">CreepJS</button>
+  <button data-url="https://fingerprintjs.github.io/fingerprintjs/" data-name="FingerprintJS">FingerprintJS</button>
 
-  <!-- WebGL -->
-  <div class="card">
-    <h2><span class="icon">🎮</span> WebGL</h2>
-    <div id="webgl-rows"></div>
-  </div>
+  <!-- Specific checks -->
+  <span class="nav-group-label">🔍 Specific</span>
+  <button data-url="https://browserleaks.com/webrtc" data-name="WebRTC Leak">WebRTC</button>
+  <button data-url="https://browserleaks.com/canvas" data-name="Canvas">Canvas</button>
+  <button data-url="https://browserleaks.com/webgl" data-name="WebGL">WebGL</button>
+  <button data-url="https://browserleaks.com/javascript" data-name="JS / TZ / CPU">JS Info</button>
+  <button data-url="https://browserleaks.com/fonts" data-name="Fonts">Fonts</button>
+  <button data-url="https://ipleak.net" data-name="IP Leak">IP Leak</button>
+  <button data-url="https://whatismybrowser.com" data-name="UA / OS">UA / OS</button>
 
-  <!-- WebRTC -->
-  <div class="card">
-    <h2><span class="icon">📡</span> WebRTC</h2>
-    <div id="webrtc-rows"></div>
-  </div>
-
-  <!-- Canvas -->
-  <div class="card">
-    <h2><span class="icon">🎨</span> Canvas Fingerprint</h2>
-    <div id="canvas-rows"></div>
-    <div class="canvas-box">
-      <canvas id="canvas-test" width="280" height="40"></canvas>
-    </div>
-  </div>
-
-  <!-- Audio -->
-  <div class="card">
-    <h2><span class="icon">🔊</span> Audio Fingerprint</h2>
-    <div id="audio-rows"></div>
-  </div>
-
-  <!-- Timezone & Location -->
-  <div class="card">
-    <h2><span class="icon">🕐</span> Timezone & Location</h2>
-    <div id="tz-rows"></div>
-  </div>
-
-  <!-- Hardware -->
-  <div class="card">
-    <h2><span class="icon">⚙️</span> Hardware</h2>
-    <div id="hw-rows"></div>
-  </div>
-
-  <!-- Fonts -->
-  <div class="card full">
-    <h2><span class="icon">🔤</span> Detected Fonts</h2>
-    <div id="font-rows"></div>
-  </div>
-
+  <!-- Bot detection -->
+  <span class="nav-group-label">🤖 Bot Detection</span>
+  <button data-url="https://bot.sannysoft.com" data-name="Sannysoft">Sannysoft</button>
+  <button data-url="https://pixelscan.net" data-name="PixelScan">PixelScan</button>
 </div>
+
+<div class="content" id="content">
+  <div class="loading" id="loading">
+    <div class="spinner">⏳</div>
+    <div>Loading BrowserLeaks...</div>
+  </div>
+  <iframe id="frame" src="https://browserleaks.com" sandbox="allow-scripts allow-same-origin allow-popups allow-forms" referrerpolicy="no-referrer"></iframe>
 </div>
 
 <script>
-function addRow(containerId, label, value, cls) {
-  const el = document.getElementById(containerId);
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.innerHTML = `<span class="label">${label}</span><span class="value ${cls || ''}">${value}</span>`;
-  el.appendChild(row);
-}
+// Quick info bar
+document.getElementById('q-ua').textContent = navigator.userAgent.match(/(Chrome|Firefox)\/[\d.]+/)?.[0] || navigator.userAgent.substring(0, 30);
+document.getElementById('q-screen').textContent = screen.width + 'x' + screen.height;
+document.getElementById('q-cpu').textContent = navigator.hardwareConcurrency || '?';
+document.getElementById('q-ram').textContent = navigator.deviceMemory || '?';
 
-function addCheck(label, status) {
-  const el = document.getElementById('checks');
-  const item = document.createElement('div');
-  item.className = 'check-item';
-  item.innerHTML = `<span class="dot ${status}"></span><span>${label}</span>`;
-  el.appendChild(item);
-}
+// Tab navigation
+const buttons = document.querySelectorAll('.nav button');
+const frame = document.getElementById('frame');
+const loading = document.getElementById('loading');
 
-async function analyze() {
-  let score = 0;
-  let total = 0;
+buttons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    buttons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const url = btn.dataset.url;
+    const name = btn.dataset.name;
+    loading.style.display = 'block';
+    loading.querySelector('div:last-child').textContent = 'Loading ' + name + '...';
+    frame.src = url;
+  });
+});
 
-  // Navigator
-  const nav = navigator;
-  addRow('nav-rows', 'User-Agent', nav.userAgent);
-  addRow('nav-rows', 'Platform', nav.platform);
-  addRow('nav-rows', 'Language', nav.language);
-  addRow('nav-rows', 'Languages', nav.languages?.join(', ') || '—');
-  addRow('nav-rows', 'Cookie enabled', nav.cookieEnabled ? 'Yes' : 'No');
-  addRow('nav-rows', 'Do Not Track', nav.doNotTrack || 'unset');
-  addRow('nav-rows', 'appVersion', nav.appVersion?.substring(0, 80) + '...');
-  addRow('nav-rows', 'oscpu', nav.oscpu || '—');
-  addRow('nav-rows', 'Vendor', nav.vendor || '—');
+frame.addEventListener('load', () => {
+  loading.style.display = 'none';
+});
 
-  // Screen
-  addRow('screen-rows', 'Screen', `${screen.width} x ${screen.height}`);
-  addRow('screen-rows', 'Available', `${screen.availWidth} x ${screen.availHeight}`);
-  addRow('screen-rows', 'Color depth', `${screen.colorDepth} bit`);
-  addRow('screen-rows', 'Pixel ratio', window.devicePixelRatio);
-  addRow('screen-rows', 'Orientation', screen.orientation?.type || '—');
-
-  // Hardware
-  addRow('hw-rows', 'CPU cores', nav.hardwareConcurrency || '—');
-  addRow('hw-rows', 'Device memory', (nav.deviceMemory || '—') + ' GB');
-  addRow('hw-rows', 'Max touch points', nav.maxTouchPoints);
-  addRow('hw-rows', 'Connection type', nav.connection?.effectiveType || '—');
-
-  // Timezone
-  const tz = Intl.DateTimeFormat().resolvedOptions();
-  addRow('tz-rows', 'Timezone', tz.timeZone);
-  addRow('tz-rows', 'UTC offset', `GMT${new Date().getTimezoneOffset() > 0 ? '-' : '+'}${String(Math.abs(Math.floor(new Date().getTimezoneOffset()/60))).padStart(2,'0')}:${String(Math.abs(new Date().getTimezoneOffset()%60)).padStart(2,'0')}`);
-  addRow('tz-rows', 'Locale', tz.locale);
-
-  // Geolocation
-  try {
-    const pos = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
-    });
-    addRow('tz-rows', 'Latitude', pos.coords.latitude.toFixed(4));
-    addRow('tz-rows', 'Longitude', pos.coords.longitude.toFixed(4));
-    addRow('tz-rows', 'Accuracy', pos.coords.accuracy + ' m');
-  } catch (e) {
-    addRow('tz-rows', 'Geolocation', e.code === 1 ? 'Blocked' : e.code === 3 ? 'Timeout' : 'Unavailable', 'warn');
-  }
-
-  // WebGL
-  try {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    if (gl) {
-      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-      addRow('webgl-rows', 'Vendor', dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR));
-      addRow('webgl-rows', 'Renderer', dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-      addRow('webgl-rows', 'Version', gl.getParameter(gl.VERSION));
-      addRow('webgl-rows', 'Shading lang', gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
-      addRow('webgl-rows', 'Max texture', gl.getParameter(gl.MAX_TEXTURE_SIZE));
-      total++; score++;
-      addCheck('WebGL', 'pass');
-    } else {
-      addRow('webgl-rows', 'Status', 'Not available', 'bad');
-      total++; addCheck('WebGL', 'fail');
-    }
-  } catch (e) {
-    addRow('webgl-rows', 'Error', e.message, 'bad');
-    total++; addCheck('WebGL', 'fail');
-  }
-
-  // WebRTC
-  total++;
-  try {
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    pc.createDataChannel('');
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    const ips = await new Promise((resolve) => {
-      const found = [];
-      const timeout = setTimeout(() => resolve(found), 3000);
-      pc.onicecandidate = (e) => {
-        if (!e.candidate) { clearTimeout(timeout); resolve(found); return; }
-        const match = e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
-        if (match && !found.includes(match[1])) found.push(match[1]);
-      };
-    });
-    pc.close();
-    if (ips.length === 0) {
-      addRow('webrtc-rows', 'Local IPs', 'None detected (WebRTC may be disabled)', 'ok');
-      score++; addCheck('WebRTC', 'pass');
-    } else {
-      addRow('webrtc-rows', 'Local IPs', ips.join(', '), 'warn');
-      addCheck('WebRTC', 'warn');
-    }
-  } catch (e) {
-    addRow('webrtc-rows', 'WebRTC', 'Disabled or blocked', 'ok');
-    score++; addCheck('WebRTC', 'pass');
-  }
-
-  // Canvas
-  total++;
-  try {
-    const c = document.getElementById('canvas-test');
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#f0f0f0'; ctx.fillRect(0, 0, 280, 40);
-    ctx.fillStyle = '#4a6cf7'; ctx.font = '14px Arial';
-    ctx.fillText('DigitalID Canvas Test 🎨 !@#$%', 10, 25);
-    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(260, 20, 10, 0, Math.PI * 2); ctx.fill();
-    const hash = c.toDataURL().split(',')[1]?.substring(0, 32) || '—';
-    addRow('canvas-rows', 'Canvas hash', hash + '...');
-    addRow('canvas-rows', 'Data URL length', c.toDataURL().length + ' chars');
-    score++; addCheck('Canvas', 'pass');
-  } catch (e) {
-    addRow('canvas-rows', 'Error', e.message, 'bad');
-    addCheck('Canvas', 'fail');
-  }
-
-  // Audio
-  total++;
-  try {
-    const actx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = actx.createOscillator();
-    const analyser = actx.createAnalyser();
-    const gain = actx.createGain();
-    const script = actx.createScriptProcessor(4096, 1, 1);
-    gain.gain.value = 0;
-    osc.connect(analyser); analyser.connect(script); script.connect(gain); gain.connect(actx.destination);
-    osc.start(0);
-    const audioHash = await new Promise((resolve) => {
-      let hash = 0;
-      script.onaudioprocess = (e) => {
-        const data = e.inputBuffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) hash += Math.abs(data[i]);
-        resolve(hash.toFixed(6));
-        osc.stop(); script.disconnect(); actx.close();
-      };
-    });
-    addRow('audio-rows', 'Audio hash', audioHash);
-    addRow('audio-rows', 'Sample rate', actx.sampleRate + ' Hz');
-    score++; addCheck('Audio', 'pass');
-  } catch (e) {
-    addRow('audio-rows', 'Error', e.message, 'warn');
-    addCheck('Audio', 'warn');
-  }
-
-  // Fonts detection
-  const testFonts = ['Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Comic Sans MS', 'Impact', 'Trebuchet MS', 'Palatino', 'Lucida Console', 'Tahoma', 'Segoe UI', 'Roboto', 'Open Sans', 'Consolas', 'Monaco', 'Menlo'];
-  const detected = [];
-  const baseFonts = ['monospace', 'sans-serif', 'serif'];
-  const testStr = 'mmmmmmmmmmlli';
-  const testSize = '72px';
-  const span = document.createElement('span');
-  span.style.position = 'absolute'; span.style.left = '-9999px'; span.style.fontSize = testSize;
-  span.textContent = testStr;
-  document.body.appendChild(span);
-  const baseWidths = {};
-  for (const bf of baseFonts) {
-    span.style.fontFamily = bf;
-    baseWidths[bf] = span.offsetWidth;
-  }
-  for (const font of testFonts) {
-    let found = false;
-    for (const bf of baseFonts) {
-      span.style.fontFamily = `'${font}', ${bf}`;
-      if (span.offsetWidth !== baseWidths[bf]) { found = true; break; }
-    }
-    if (found) detected.push(font);
-  }
-  document.body.removeChild(span);
-  addRow('font-rows', 'Detected fonts', detected.length);
-  addRow('font-rows', 'Font list', detected.join(', ') || 'None detected');
-
-  // Score
-  total += 2; score += 2; // nav + screen always pass
-  const pct = Math.round((score / total) * 100);
-  const scoreEl = document.getElementById('score');
-  scoreEl.textContent = pct + '%';
-  scoreEl.className = 'score ' + (pct >= 80 ? 'good' : pct >= 50 ? 'medium' : 'poor');
-
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('content').style.display = 'block';
-}
-
-analyze();
+// Hide loading after timeout (some sites block iframe load event)
+setTimeout(() => { loading.style.display = 'none'; }, 5000);
 </script>
+
 </body>
 </html>
