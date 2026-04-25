@@ -243,7 +243,7 @@ export class ProfileManager {
       // Ignore — local API server may not be running
     }
 
-    // Restore saved tabs (open URLs from last session)
+    // Restore saved tabs (open URLs from last session) — all in NEW tabs
     try {
       const tabsRow = this.db
         .prepare('SELECT data FROM profile_data WHERE profile_id = ? AND data_type = ?')
@@ -251,15 +251,11 @@ export class ProfileManager {
       if (tabsRow?.data) {
         const urls: string[] = JSON.parse(tabsRow.data.toString('utf-8'));
         if (Array.isArray(urls) && urls.length > 0) {
-          // Navigate the first page to the first URL
-          const firstPage = context.pages()[0];
-          if (firstPage) {
-            await firstPage.goto(urls[0], { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
-          }
-          // Open remaining URLs in new tabs
-          for (let i = 1; i < urls.length; i++) {
+          for (const url of urls) {
+            // Skip fingerprint check URL to avoid duplicate
+            if (url.includes('fingerprint-check')) continue;
             const newPage = await context.newPage();
-            await newPage.goto(urls[i], { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            await newPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
           }
         }
       }
@@ -361,7 +357,7 @@ export class ProfileManager {
         const pages = context.pages();
         const urls = pages
           .map((p) => p.url())
-          .filter((u) => u && u !== 'about:blank' && !u.startsWith('chrome://'));
+          .filter((u) => u && u !== 'about:blank' && !u.startsWith('chrome://') && !u.includes('fingerprint-check'));
         if (urls.length > 0) {
           const tabsJson = JSON.stringify(urls);
           const now4 = new Date().toISOString();
@@ -475,7 +471,7 @@ export class ProfileManager {
         const pages = context.pages();
         const urls = pages
           .map((p) => p.url())
-          .filter((u) => u && u !== 'about:blank' && !u.startsWith('chrome://'));
+          .filter((u) => u && u !== 'about:blank' && !u.startsWith('chrome://') && !u.includes('fingerprint-check'));
         if (urls.length > 0) {
           const tabsJson = JSON.stringify(urls);
           const now4 = new Date().toISOString();
