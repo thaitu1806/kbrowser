@@ -34,9 +34,9 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
   });
 
   // Load profiles from backend
-  const loadProfiles = useCallback(async () => {
+  const loadProfiles = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       if (api) {
         const list = await api.listProfiles();
@@ -60,9 +60,9 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
         } catch { /* ignore */ }
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load profiles');
+      if (!silent) setError(err instanceof Error ? err.message : 'Failed to load profiles');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -74,10 +74,10 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
         setOpenStatus(data.message);
       });
     }
-    // Auto-poll every 3 seconds to detect browser close
+    // Silent poll every 10 seconds to detect browser close (no loading flash)
     const interval = setInterval(() => {
-      if (api) loadProfiles();
-    }, 3000);
+      if (api) loadProfiles(true);
+    }, 10000);
     return () => clearInterval(interval);
   }, [loadProfiles]);
 
