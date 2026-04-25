@@ -169,6 +169,11 @@ interface ProfileFormData {
   extensionMode: string;
   dataSync: 'global' | 'custom';
   browserSettings: 'global' | 'custom';
+  continueLastPage: boolean;
+  disableVideos: boolean;
+  disableImagesOver: boolean;
+  disableImagesKB: number;
+  deleteCacheData: boolean;
   randomFingerprint: boolean;
 }
 
@@ -236,6 +241,11 @@ const defaultForm: ProfileFormData = {
   extensionMode: 'team',
   dataSync: 'global',
   browserSettings: 'global',
+  continueLastPage: false,
+  disableVideos: false,
+  disableImagesOver: false,
+  disableImagesKB: 10,
+  deleteCacheData: false,
   randomFingerprint: false,
 };
 
@@ -739,6 +749,11 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             extensionMode: form.extensionMode,
             dataSync: form.dataSync,
             browserSettings: form.browserSettings,
+            continueLastPage: form.continueLastPage,
+            disableVideos: form.disableVideos,
+            disableImagesOver: form.disableImagesOver,
+            disableImagesKB: form.disableImagesKB,
+            deleteCacheData: form.deleteCacheData,
             randomFingerprint: form.randomFingerprint,
             group: form.group,
             tags: form.tags,
@@ -1367,6 +1382,40 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   Customize
                 </button>
               </div>
+              {form.browserSettings === 'custom' && (
+                <div className="location-custom-box" style={{ marginTop: 10 }}>
+                  <label className="lang-checkbox-row" style={{ borderBottom: '1px solid #e8ecf1', padding: '10px 0' }}>
+                    <input type="checkbox" checked={form.continueLastPage} onChange={(e) => update('continueLastPage', e.target.checked)} />
+                    <span>Continue browsing the last opened page</span>
+                  </label>
+                  <label className="lang-checkbox-row" style={{ borderBottom: '1px solid #e8ecf1', padding: '10px 0' }}>
+                    <input type="checkbox" checked={form.disableVideos} onChange={(e) => update('disableVideos', e.target.checked)} />
+                    <span>Disable loading videos</span>
+                  </label>
+                  <label className="lang-checkbox-row" style={{ borderBottom: '1px solid #e8ecf1', padding: '10px 0', flexWrap: 'wrap' }}>
+                    <input type="checkbox" checked={form.disableImagesOver} onChange={(e) => update('disableImagesOver', e.target.checked)} />
+                    <span>Disable loading images over</span>
+                    <input
+                      type="number"
+                      value={form.disableImagesKB}
+                      onChange={(e) => update('disableImagesKB', parseInt(e.target.value) || 0)}
+                      style={{ width: 60, padding: '4px 8px', border: '1px solid #e8ecf1', borderRadius: 6, fontSize: 13, margin: '0 6px' }}
+                      min={0}
+                    />
+                    <span>KB to save traffic</span>
+                    {form.disableImagesOver && (
+                      <div style={{ width: '100%', fontSize: 11, color: '#f59e0b', marginTop: 4, paddingLeft: 26 }}>
+                        In order to be able to verify the graph, recommend filling in 10 KB; 0 KB means no images will be loaded
+                      </div>
+                    )}
+                  </label>
+                  <label className="lang-checkbox-row" style={{ padding: '10px 0' }}>
+                    <input type="checkbox" checked={form.deleteCacheData} onChange={(e) => update('deleteCacheData', e.target.checked)} />
+                    <span>Delete cache data</span>
+                    <span style={{ fontSize: 11, color: '#a0aec0', marginLeft: 4 }}>Will be deleted on startup and will not sync selected data types across devices</span>
+                  </label>
+                </div>
+              )}
             </FormRow>
 
             <FormRow label="Random fingerprint">
