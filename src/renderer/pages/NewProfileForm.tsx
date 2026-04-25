@@ -152,6 +152,11 @@ interface ProfileFormData {
   macAddressMode: 'real' | 'custom';
   macAddress: string;
   doNotTrack: 'default' | 'open' | 'close';
+  portScanProtection: 'enable' | 'close';
+  portScanPorts: string;
+  hardwareAcceleration: 'default' | 'open' | 'close';
+  disableTLS: 'open' | 'close';
+  launchArgs: string;
   // Screen Resolution
   screenResolutionMode: 'random' | 'predefined' | 'custom';
   screenResolutionValue: string;
@@ -217,6 +222,11 @@ const defaultForm: ProfileFormData = {
   macAddressMode: 'custom',
   macAddress: '00-1F-3A-19-B0-02',
   doNotTrack: 'default',
+  portScanProtection: 'enable',
+  portScanPorts: '',
+  hardwareAcceleration: 'default',
+  disableTLS: 'close',
+  launchArgs: '',
   screenResolutionMode: 'predefined',
   screenResolutionValue: 'Based on User-Agent',
   customWidth: '1920',
@@ -234,6 +244,62 @@ interface NewProfileFormProps {
   onSave?: (data: ProfileFormData) => void;
   onCancel?: () => void;
 }
+
+const WEBGL_VENDORS = [
+  { icon: '🍎', name: 'Apple Inc.' },
+  { icon: '🔷', name: 'Google Inc. (AMD)' },
+  { icon: '🔷', name: 'Google Inc. (Intel)' },
+  { icon: '🍎', name: 'Google Inc. (Apple)' },
+  { icon: '🍎', name: 'Google Inc. (ATI Technologies Inc.)' },
+  { icon: '🍎', name: 'Google Inc. (Intel Inc.)' },
+  { icon: '🔷', name: 'Google Inc. (NVIDIA)' },
+  { icon: '🔷', name: 'Google Inc. (Mesa)' },
+];
+
+const WEBGL_RENDERERS_BY_VENDOR: Record<string, string[]> = {
+  'Apple Inc.': [
+    'Apple GPU',
+    'Apple M1',
+    'Apple M2',
+    'Apple M3',
+  ],
+  'Google Inc. (AMD)': [
+    'ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (AMD, AMD Radeon RX 7900 XTX Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (AMD, AMD Radeon Pro 5500M OpenGL Engine)',
+  ],
+  'Google Inc. (Intel)': [
+    'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (Intel, Intel(R) HD Graphics 530 Direct3D11 vs_5_0 ps_5_0)',
+  ],
+  'Google Inc. (Apple)': [
+    'ANGLE (Apple, Apple M1, OpenGL 4.1)',
+    'ANGLE (Apple, Apple M2, OpenGL 4.1)',
+    'ANGLE (Apple, Apple M3, OpenGL 4.1)',
+  ],
+  'Google Inc. (ATI Technologies Inc.)': [
+    'AMD Radeon Pro 5300M OpenGL Engine',
+    'AMD Radeon Pro 560X OpenGL Engine',
+  ],
+  'Google Inc. (Intel Inc.)': [
+    'Intel(R) Iris(TM) Plus Graphics OpenGL Engine',
+    'Intel(R) UHD Graphics 630 OpenGL Engine',
+  ],
+  'Google Inc. (NVIDIA)': [
+    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 Direct3D11 vs_5_0 ps_5_0)',
+  ],
+  'Google Inc. (Mesa)': [
+    'Mesa Intel(R) UHD Graphics 630 (CFL GT2)',
+    'Mesa AMD RADV NAVI10',
+  ],
+};
 
 const WEBGL_RENDERERS = [
   'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 6GB Direct3D11 vs_5_0 ps_5_0)',
@@ -665,6 +731,11 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             macAddressMode: form.macAddressMode,
             macAddress: form.macAddress,
             doNotTrack: form.doNotTrack,
+            portScanProtection: form.portScanProtection,
+            portScanPorts: form.portScanPorts,
+            hardwareAcceleration: form.hardwareAcceleration,
+            disableTLS: form.disableTLS,
+            launchArgs: form.launchArgs,
             extensionMode: form.extensionMode,
             dataSync: form.dataSync,
             browserSettings: form.browserSettings,
@@ -1235,18 +1306,31 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 <div className="webgl-custom-fields">
                   <div className="sub-field">
                     <label>Vendor</label>
-                    <select value={form.webglVendor} onChange={(e) => update('webglVendor', e.target.value)}>
-                      <option>Google Inc. (NVIDIA)</option>
-                      <option>Google Inc. (AMD)</option>
-                      <option>Google Inc. (Intel)</option>
+                    <select value={form.webglVendor} onChange={(e) => {
+                      const vendor = e.target.value;
+                      update('webglVendor', vendor);
+                      // Auto-set first renderer for this vendor
+                      const renderers = WEBGL_RENDERERS_BY_VENDOR[vendor];
+                      if (renderers && renderers.length > 0) {
+                        update('webglRenderer', renderers[0]);
+                      }
+                    }}>
+                      {WEBGL_VENDORS.map((v) => (
+                        <option key={v.name} value={v.name}>{v.icon} {v.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="sub-field">
                     <label>Renderer</label>
                     <div className="renderer-row">
-                      <input value={form.webglRenderer} onChange={(e) => update('webglRenderer', e.target.value)} />
+                      <select value={form.webglRenderer} onChange={(e) => update('webglRenderer', e.target.value)} style={{ flex: 1 }}>
+                        {(WEBGL_RENDERERS_BY_VENDOR[form.webglVendor] || WEBGL_RENDERERS).map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
                       <button className="icon-btn" title="Random" onClick={() => {
-                        update('webglRenderer', WEBGL_RENDERERS[Math.floor(Math.random() * WEBGL_RENDERERS.length)]);
+                        const renderers = WEBGL_RENDERERS_BY_VENDOR[form.webglVendor] || WEBGL_RENDERERS;
+                        update('webglRenderer', renderers[Math.floor(Math.random() * renderers.length)]);
                       }}>🔀</button>
                     </div>
                   </div>
@@ -1460,6 +1544,44 @@ function ShowMoreSection({ form, update }: { form: ProfileFormData; update: <K e
               <button className={`toggle-btn ${form.doNotTrack === 'open' ? 'active' : ''}`} onClick={() => update('doNotTrack', 'open')}>Open</button>
               <button className={`toggle-btn ${form.doNotTrack === 'close' ? 'active' : ''}`} onClick={() => update('doNotTrack', 'close')}>Close</button>
             </div>
+          </FormRow>
+
+          <FormRow label="Port scan protection">
+            <div className="toggle-group" style={{ marginBottom: 8 }}>
+              <button className={`toggle-btn ${form.portScanProtection === 'enable' ? 'active' : ''}`} onClick={() => update('portScanProtection', 'enable')}>Enable</button>
+              <button className={`toggle-btn ${form.portScanProtection === 'close' ? 'active' : ''}`} onClick={() => update('portScanProtection', 'close')}>Close</button>
+            </div>
+            {form.portScanProtection === 'enable' && (
+              <input
+                value={form.portScanPorts}
+                onChange={(e) => update('portScanPorts', e.target.value)}
+                placeholder="Optional. Ports allowed to be scanned"
+              />
+            )}
+          </FormRow>
+
+          <FormRow label="Hardware acceleration">
+            <div className="toggle-group">
+              <button className={`toggle-btn ${form.hardwareAcceleration === 'default' ? 'active' : ''}`} onClick={() => update('hardwareAcceleration', 'default')}>Default</button>
+              <button className={`toggle-btn ${form.hardwareAcceleration === 'open' ? 'active' : ''}`} onClick={() => update('hardwareAcceleration', 'open')}>Open</button>
+              <button className={`toggle-btn ${form.hardwareAcceleration === 'close' ? 'active' : ''}`} onClick={() => update('hardwareAcceleration', 'close')}>Close</button>
+            </div>
+          </FormRow>
+
+          <FormRow label="Disable TLS features">
+            <div className="toggle-group">
+              <button className={`toggle-btn ${form.disableTLS === 'open' ? 'active' : ''}`} onClick={() => update('disableTLS', 'open')}>Open</button>
+              <button className={`toggle-btn ${form.disableTLS === 'close' ? 'active' : ''}`} onClick={() => update('disableTLS', 'close')}>Close</button>
+            </div>
+          </FormRow>
+
+          <FormRow label="Launch Args">
+            <textarea
+              value={form.launchArgs}
+              onChange={(e) => update('launchArgs', e.target.value)}
+              placeholder={'example:\n-disable-notifications\n-blink-settings=imagesEnabled=false'}
+              rows={3}
+            />
           </FormRow>
         </>
       )}
