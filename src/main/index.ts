@@ -41,9 +41,14 @@ app.whenReady().then(async () => {
     profileManager = services.profileManager;
 
     // Start Local API Server on port 5015
-    localApiServer = new LocalAPIServer(profileManager, 'digitalid-local-api-key');
-    await localApiServer.start(5015);
-    console.log('Local API Server started on port 5015');
+    try {
+      localApiServer = new LocalAPIServer(profileManager, 'digitalid-local-api-key');
+      await localApiServer.start(5015);
+      console.log('Local API Server started on port 5015');
+    } catch (apiErr) {
+      console.error('Failed to start Local API Server:', apiErr);
+      // Continue without API server — app still works
+    }
   } catch (err) {
     console.error('Failed to initialize services:', err);
   }
