@@ -1026,34 +1026,6 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                   </select>
                 </FormRow>
 
-                <div className="section-divider" />
-                <div className="section-label">Platform</div>
-
-                <FormRow label="Platform">
-                  <button className="add-platform-btn" onClick={() => {
-                    const account = prompt('Enter platform account URL or name:');
-                    if (account) update('platformAccounts', [...form.platformAccounts, account]);
-                  }}>⊕ Add Platform Account</button>
-                  {form.platformAccounts.length > 0 && (
-                    <div style={{ marginTop: 6 }}>
-                      {form.platformAccounts.map((acc, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#1e2a3a', marginBottom: 4 }}>
-                          <span>{acc}</span>
-                          <span style={{ cursor: 'pointer', color: '#ef4444' }} onClick={() => update('platformAccounts', form.platformAccounts.filter((_, idx) => idx !== i))}>✕</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </FormRow>
-
-                <FormRow label="Tabs">
-                  <textarea
-                    value={form.tabs}
-                    onChange={(e) => update('tabs', e.target.value)}
-                    placeholder={'Enter URLs (one URL per line)\nwww.google.com\nwww.facebook.com'}
-                    rows={3}
-                  />
-                </FormRow>
               </div>
             </div>
           </div>
