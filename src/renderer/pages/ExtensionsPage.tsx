@@ -183,8 +183,17 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
+      if (f.size > 1024 * 1024) {
+        setError('Icon file must be less than 1MB');
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = () => setIconPreview(reader.result as string);
+      reader.onload = () => {
+        const result = reader.result as string;
+        if (result && result.startsWith('data:image')) {
+          setIconPreview(result);
+        }
+      };
       reader.readAsDataURL(f);
     }
   };
@@ -193,8 +202,17 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
     e.preventDefault();
     const f = e.dataTransfer.files?.[0];
     if (f && (f.type === 'image/png' || f.type === 'image/jpeg' || f.type === 'image/jpg')) {
+      if (f.size > 1024 * 1024) {
+        setError('Icon file must be less than 1MB');
+        return;
+      }
       const reader = new FileReader();
-      reader.onload = () => setIconPreview(reader.result as string);
+      reader.onload = () => {
+        const result = reader.result as string;
+        if (result && result.startsWith('data:image')) {
+          setIconPreview(result);
+        }
+      };
       reader.readAsDataURL(f);
     }
   };
@@ -284,7 +302,7 @@ function AddExtensionModal({ onClose, onSuccess }: { onClose: () => void; onSucc
                   onDrop={handleIconDrop}
                   onDragOver={(e) => e.preventDefault()}
                 >
-                  {iconPreview ? (
+                  {iconPreview && iconPreview.startsWith('data:image') ? (
                     <img src={iconPreview} alt="icon" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
                   ) : (
                     <>
