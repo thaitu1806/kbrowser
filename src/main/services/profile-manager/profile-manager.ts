@@ -201,7 +201,7 @@ export class ProfileManager {
             '--disable-dev-shm-usage',
           ],
       viewport: null,
-      ignoreDefaultArgs: ['--enable-automation'],
+      ignoreDefaultArgs: ['--enable-automation', '--host-resolver-rules'],
       env: {
         ...process.env,
         GOOGLE_API_KEY: 'no',
