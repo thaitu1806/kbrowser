@@ -109,14 +109,38 @@ export function setupIPC(): { profileManager: ProfileManager } {
     // Ensure Playwright browsers are installed
     try {
       const { execSync } = require('child_process');
-      // Try to install chromium if not present
-      execSync('npx playwright install chromium firefox', {
-        stdio: 'pipe',
-        cwd: path.join(__dirname, '..', '..'),
-        timeout: 300000, // 5 minutes max
-      });
-    } catch {
-      // Ignore — will fail at launch if truly missing
+      const fs = require('fs');
+      
+      // Find playwright CLI from node_modules (works in both dev and packaged app)
+      const playwrightCli = require.resolve('playwright/cli');
+      
+      // Check if chromium is already installed by looking for the executable
+      const browserPath = path.join(
+        process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'),
+        'ms-playwright'
+      );
+      
+      const needsInstall = !fs.existsSync(browserPath) || 
+        fs.readdirSync(browserPath).filter((d: string) => d.startsWith('chromium')).length === 0;
+      
+      if (needsInstall) {
+        // Send status to renderer
+        if (event.sender && !event.sender.isDestroyed()) {
+          event.sender.send('profile:open:status', { 
+            profileId, status: 'downloading', 
+            message: 'Downloading browser (first time only)...' 
+          });
+        }
+        
+        execSync(`node "${playwrightCli}" install chromium`, {
+          stdio: 'pipe',
+          timeout: 600000, // 10 minutes for download
+          env: { ...process.env },
+        });
+      }
+    } catch (installErr) {
+      console.error('Failed to install Playwright browsers:', installErr);
+      // Continue — will fail at launch if truly missing
     }
 
     const connection = await profileManager.openProfile(profileId);
