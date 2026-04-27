@@ -110,7 +110,6 @@ export function setupIPC(): { profileManager: ProfileManager } {
     try {
       const fs = require('fs');
       const os = require('os');
-      const { execSync } = require('child_process');
       const browserBase = path.join(
         process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
         'ms-playwright'
@@ -124,17 +123,30 @@ export function setupIPC(): { profileManager: ProfileManager } {
             message: 'Downloading Chromium (~150MB, first time only)...'
           });
         }
-        // Use Electron as Node.js to run playwright install
-        const electronExe = process.execPath;
+        // Use Playwright's internal registry API to download browsers
+        // This works in packaged app because playwright-core is bundled
         try {
-          execSync(
-            `"${electronExe}" -e "require('playwright-core/lib/server').installDefaultBrowsersForNpmInstall()"`,
-            { stdio: 'pipe', timeout: 600000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
-          );
+          const { registry } = require('playwright-core/lib/server');
+          const browsers = registry.defaultExecutables();
+          const chromiumBrowser = browsers.find((b: { name: string }) => b.name === 'chromium');
+          if (chromiumBrowser) {
+            await registry.installBrowsers([chromiumBrowser]);
+          }
         } catch {
+          // Fallback: try direct download via playwright-core internal API
           try {
-            execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 600000 });
-          } catch (e2) { console.error('npx fallback failed:', e2); }
+            const { installBrowsersForNpmInstall } = require('playwright-core/lib/server');
+            await installBrowsersForNpmInstall(['chromium']);
+          } catch {
+            // Last fallback: use execSync with ELECTRON_RUN_AS_NODE
+            try {
+              const { execSync } = require('child_process');
+              execSync(
+                `"${process.execPath}" -e "async function main() { const pw = require('playwright'); await pw.chromium.launch({headless:true}).then(b=>b.close()).catch(()=>{}) } main()"`,
+                { stdio: 'pipe', timeout: 600000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
+              );
+            } catch (e3) { console.error('All install methods failed:', e3); }
+          }
         }
       }
     } catch (err) { console.error('Browser install check failed:', err); }
