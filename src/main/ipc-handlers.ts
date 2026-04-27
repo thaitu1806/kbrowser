@@ -111,13 +111,11 @@ export function setupIPC(): { profileManager: ProfileManager } {
     try {
       const fs = require('fs');
       const os = require('os');
-      const { execSync } = require('child_process');
       const browserBase = path.join(
         process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
         'ms-playwright'
       );
 
-      // Check which browsers need install
       const hasChromium = fs.existsSync(browserBase) &&
         fs.readdirSync(browserBase).some((d: string) => d.startsWith('chromium'));
       const hasFirefox = fs.existsSync(browserBase) &&
@@ -135,63 +133,42 @@ export function setupIPC(): { profileManager: ProfileManager } {
           });
         }
 
-        // Write a temp script file to avoid asar path issues
-        const tmpScript = path.join(os.tmpdir(), 'pw-install.js');
-        fs.writeFileSync(tmpScript, `
-          const { execSync } = require('child_process');
+        // Method: Use child_process.exec with npx (most reliable cross-platform)
+        const { exec } = require('child_process');
+        for (const browser of missing) {
           try {
-            // Find playwright CLI
-            const cliPath = require.resolve('playwright-core/cli');
-            execSync(process.argv[1] + ' "' + cliPath + '" install ${missing.join(' ')}', {
-              stdio: 'inherit',
-              timeout: 600000,
-              env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
+            await new Promise<void>((resolve, reject) => {
+              const child = exec(
+                `npx playwright install ${browser}`,
+                { timeout: 600000, cwd: os.homedir() },
+                (error: Error | null, stdout: string, stderr: string) => {
+                  if (error) {
+                    installErrors.push(`npx install ${browser}: ${stderr || error.message}`);
+                    reject(error);
+                  } else {
+                    console.log(`Installed ${browser}:`, stdout);
+                    resolve();
+                  }
+                }
+              );
+              // Forward progress to renderer
+              child.stdout?.on('data', (data: string) => {
+                if (event.sender && !event.sender.isDestroyed()) {
+                  event.sender.send('profile:open:status', {
+                    profileId, status: 'downloading',
+                    message: `Installing ${browser}: ${data.toString().trim().slice(-80)}`
+                  });
+                }
+              });
             });
-          } catch(e) {
-            console.error('Script install failed:', e.message);
-            process.exit(1);
-          }
-        `);
-
-        // Method 1: Use Electron as Node to run playwright CLI
-        try {
-          const result = execSync(
-            `"${process.execPath}" "${require.resolve('playwright-core/cli')}" install ${missing.join(' ')}`,
-            {
-              stdio: 'pipe',
-              timeout: 600000,
-              env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-            }
-          );
-          console.log('Playwright install output:', result?.toString());
-        } catch (e1: unknown) {
-          const err1 = e1 as { stderr?: Buffer; message?: string };
-          const msg1 = err1.stderr?.toString() || err1.message || 'Unknown error';
-          installErrors.push(`Method 1 (CLI): ${msg1}`);
-          console.error('Method 1 failed:', msg1);
-
-          // Method 2: Use npx with full path
-          try {
-            execSync(`npx playwright install ${missing.join(' ')}`, {
-              stdio: 'pipe',
-              timeout: 600000,
-              cwd: os.homedir(),
-            });
-          } catch (e2: unknown) {
-            const err2 = e2 as { stderr?: Buffer; message?: string };
-            const msg2 = err2.stderr?.toString() || err2.message || 'Unknown error';
-            installErrors.push(`Method 2 (npx): ${msg2}`);
-            console.error('Method 2 failed:', msg2);
+          } catch {
+            // Continue to try next browser
           }
         }
-
-        // Clean up temp script
-        try { fs.unlinkSync(tmpScript); } catch { /* ignore */ }
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       installErrors.push(`Check failed: ${errMsg}`);
-      console.error('Browser install check failed:', errMsg);
     }
 
     try {
@@ -203,7 +180,6 @@ export function setupIPC(): { profileManager: ProfileManager } {
       });
       return connection;
     } catch (openErr: unknown) {
-      // If open fails and we had install errors, include them in the error message
       const openMsg = openErr instanceof Error ? openErr.message : 'Unknown error';
       if (installErrors.length > 0) {
         throw new Error(`${openMsg}\n\n--- Browser Install Logs ---\n${installErrors.join('\n')}`);
