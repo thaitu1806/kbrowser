@@ -106,42 +106,38 @@ export function setupIPC(): { profileManager: ProfileManager } {
   });
 
   ipcMain.handle('profile:open', async (event, profileId: string) => {
-    // Ensure Playwright browsers are installed
+    // Ensure Playwright browsers are installed on first run
     try {
-      const { execSync } = require('child_process');
       const fs = require('fs');
-      
-      // Find playwright CLI from node_modules (works in both dev and packaged app)
-      const playwrightCli = require.resolve('playwright/cli');
-      
-      // Check if chromium is already installed by looking for the executable
-      const browserPath = path.join(
-        process.env.LOCALAPPDATA || path.join(require('os').homedir(), 'AppData', 'Local'),
+      const os = require('os');
+      const { execSync } = require('child_process');
+      const browserBase = path.join(
+        process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
         'ms-playwright'
       );
-      
-      const needsInstall = !fs.existsSync(browserPath) || 
-        fs.readdirSync(browserPath).filter((d: string) => d.startsWith('chromium')).length === 0;
-      
+      const needsInstall = !fs.existsSync(browserBase) ||
+        fs.readdirSync(browserBase).filter((d: string) => d.startsWith('chromium')).length === 0;
       if (needsInstall) {
-        // Send status to renderer
         if (event.sender && !event.sender.isDestroyed()) {
-          event.sender.send('profile:open:status', { 
-            profileId, status: 'downloading', 
-            message: 'Downloading browser (first time only)...' 
+          event.sender.send('profile:open:status', {
+            profileId, status: 'downloading',
+            message: 'Downloading Chromium (~150MB, first time only)...'
           });
         }
-        
-        execSync(`node "${playwrightCli}" install chromium`, {
-          stdio: 'pipe',
-          timeout: 600000, // 10 minutes for download
-          env: { ...process.env },
-        });
+        // Use Electron as Node.js to run playwright install
+        const electronExe = process.execPath;
+        try {
+          execSync(
+            `"${electronExe}" -e "require('playwright-core/lib/server').installDefaultBrowsersForNpmInstall()"`,
+            { stdio: 'pipe', timeout: 600000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
+          );
+        } catch {
+          try {
+            execSync('npx playwright install chromium', { stdio: 'pipe', timeout: 600000 });
+          } catch (e2) { console.error('npx fallback failed:', e2); }
+        }
       }
-    } catch (installErr) {
-      console.error('Failed to install Playwright browsers:', installErr);
-      // Continue — will fail at launch if truly missing
-    }
+    } catch (err) { console.error('Browser install check failed:', err); }
 
     const connection = await profileManager.openProfile(profileId);
     const defaultUser = getDefaultUserId();
