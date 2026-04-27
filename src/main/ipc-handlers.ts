@@ -107,57 +107,109 @@ export function setupIPC(): { profileManager: ProfileManager } {
 
   ipcMain.handle('profile:open', async (event, profileId: string) => {
     // Ensure Playwright browsers are installed on first run
+    const installErrors: string[] = [];
     try {
       const fs = require('fs');
       const os = require('os');
+      const { execSync } = require('child_process');
       const browserBase = path.join(
         process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
         'ms-playwright'
       );
-      const needsInstall = !fs.existsSync(browserBase) ||
-        fs.readdirSync(browserBase).filter((d: string) => d.startsWith('chromium')).length === 0;
-      if (needsInstall) {
+
+      // Check which browsers need install
+      const hasChromium = fs.existsSync(browserBase) &&
+        fs.readdirSync(browserBase).some((d: string) => d.startsWith('chromium'));
+      const hasFirefox = fs.existsSync(browserBase) &&
+        fs.readdirSync(browserBase).some((d: string) => d.startsWith('firefox'));
+
+      if (!hasChromium || !hasFirefox) {
+        const missing = [];
+        if (!hasChromium) missing.push('chromium');
+        if (!hasFirefox) missing.push('firefox');
+
         if (event.sender && !event.sender.isDestroyed()) {
           event.sender.send('profile:open:status', {
             profileId, status: 'downloading',
-            message: 'Downloading Chromium (~150MB, first time only)...'
+            message: `Downloading ${missing.join(' + ')} (~200MB, first time only)...`
           });
         }
-        // Use Playwright's internal registry API to download browsers
-        // This works in packaged app because playwright-core is bundled
-        try {
-          const { registry } = require('playwright-core/lib/server');
-          const browsers = registry.defaultExecutables();
-          const chromiumBrowser = browsers.find((b: { name: string }) => b.name === 'chromium');
-          if (chromiumBrowser) {
-            await registry.installBrowsers([chromiumBrowser]);
-          }
-        } catch {
-          // Fallback: try direct download via playwright-core internal API
+
+        // Write a temp script file to avoid asar path issues
+        const tmpScript = path.join(os.tmpdir(), 'pw-install.js');
+        fs.writeFileSync(tmpScript, `
+          const { execSync } = require('child_process');
           try {
-            const { installBrowsersForNpmInstall } = require('playwright-core/lib/server');
-            await installBrowsersForNpmInstall(['chromium']);
-          } catch {
-            // Last fallback: use execSync with ELECTRON_RUN_AS_NODE
-            try {
-              const { execSync } = require('child_process');
-              execSync(
-                `"${process.execPath}" -e "async function main() { const pw = require('playwright'); await pw.chromium.launch({headless:true}).then(b=>b.close()).catch(()=>{}) } main()"`,
-                { stdio: 'pipe', timeout: 600000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
-              );
-            } catch (e3) { console.error('All install methods failed:', e3); }
+            // Find playwright CLI
+            const cliPath = require.resolve('playwright-core/cli');
+            execSync(process.argv[1] + ' "' + cliPath + '" install ${missing.join(' ')}', {
+              stdio: 'inherit',
+              timeout: 600000,
+              env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' })
+            });
+          } catch(e) {
+            console.error('Script install failed:', e.message);
+            process.exit(1);
+          }
+        `);
+
+        // Method 1: Use Electron as Node to run playwright CLI
+        try {
+          const result = execSync(
+            `"${process.execPath}" "${require.resolve('playwright-core/cli')}" install ${missing.join(' ')}`,
+            {
+              stdio: 'pipe',
+              timeout: 600000,
+              env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+            }
+          );
+          console.log('Playwright install output:', result?.toString());
+        } catch (e1: unknown) {
+          const err1 = e1 as { stderr?: Buffer; message?: string };
+          const msg1 = err1.stderr?.toString() || err1.message || 'Unknown error';
+          installErrors.push(`Method 1 (CLI): ${msg1}`);
+          console.error('Method 1 failed:', msg1);
+
+          // Method 2: Use npx with full path
+          try {
+            execSync(`npx playwright install ${missing.join(' ')}`, {
+              stdio: 'pipe',
+              timeout: 600000,
+              cwd: os.homedir(),
+            });
+          } catch (e2: unknown) {
+            const err2 = e2 as { stderr?: Buffer; message?: string };
+            const msg2 = err2.stderr?.toString() || err2.message || 'Unknown error';
+            installErrors.push(`Method 2 (npx): ${msg2}`);
+            console.error('Method 2 failed:', msg2);
           }
         }
-      }
-    } catch (err) { console.error('Browser install check failed:', err); }
 
-    const connection = await profileManager.openProfile(profileId);
-    const defaultUser = getDefaultUserId();
-    await actionLogger.log({
-      userId: defaultUser, username: 'admin', action: 'profile.open',
-      profileId, details: { wsEndpoint: connection.wsEndpoint },
-    });
-    return connection;
+        // Clean up temp script
+        try { fs.unlinkSync(tmpScript); } catch { /* ignore */ }
+      }
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      installErrors.push(`Check failed: ${errMsg}`);
+      console.error('Browser install check failed:', errMsg);
+    }
+
+    try {
+      const connection = await profileManager.openProfile(profileId);
+      const defaultUser = getDefaultUserId();
+      await actionLogger.log({
+        userId: defaultUser, username: 'admin', action: 'profile.open',
+        profileId, details: { wsEndpoint: connection.wsEndpoint },
+      });
+      return connection;
+    } catch (openErr: unknown) {
+      // If open fails and we had install errors, include them in the error message
+      const openMsg = openErr instanceof Error ? openErr.message : 'Unknown error';
+      if (installErrors.length > 0) {
+        throw new Error(`${openMsg}\n\n--- Browser Install Logs ---\n${installErrors.join('\n')}`);
+      }
+      throw openErr;
+    }
   });
 
   ipcMain.handle('profile:close', async (_event, profileId: string) => {
