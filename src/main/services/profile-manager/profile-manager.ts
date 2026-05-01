@@ -182,10 +182,10 @@ export class ProfileManager {
     const fpConfig = row.fingerprint_config ? JSON.parse(row.fingerprint_config) : null;
 
     // Auto-resolve timezone & locale from proxy IP before launching browser
-    try {
-      let geoInfo;
-      if (proxyOption) {
-        // Resolve through proxy to get the exit IP's geo data
+    // Auto-resolve timezone & locale from proxy IP before launching browser
+    // Only resolve when proxy is configured — without proxy, keep the saved config values
+    if (proxyOption) {
+      try {
         const proxyForGeo = {
           protocol: row.proxy_id ? (this.db.prepare('SELECT protocol FROM proxies WHERE id = ?').get(row.proxy_id) as { protocol: string })?.protocol || 'http' : 'http',
           host: proxyOption.server.replace(/^.*:\/\//, '').split(':')[0],
@@ -193,20 +193,16 @@ export class ProfileManager {
           username: proxyOption.username,
           password: proxyOption.password,
         };
-        geoInfo = await resolveGeoFromProxy(proxyForGeo);
-      } else {
-        // No proxy — resolve from direct IP
-        geoInfo = await resolveGeoFromIP();
-      }
+        const geoInfo = await resolveGeoFromProxy(proxyForGeo);
 
-      if (geoInfo && fpConfig) {
-        fpConfig.timezone = geoInfo.timezone;
-        fpConfig.locale = geoInfo.locale;
-        console.log(`[GeoResolver] IP: ${geoInfo.ip} → timezone: ${geoInfo.timezone}, locale: ${geoInfo.locale} (${geoInfo.city}, ${geoInfo.country})`);
+        if (geoInfo && fpConfig) {
+          fpConfig.timezone = geoInfo.timezone;
+          fpConfig.locale = geoInfo.locale;
+          console.log(`[GeoResolver] Proxy IP: ${geoInfo.ip} → timezone: ${geoInfo.timezone}, locale: ${geoInfo.locale} (${geoInfo.city}, ${geoInfo.country})`);
+        }
+      } catch (geoErr) {
+        console.warn('[GeoResolver] Failed to resolve geo from proxy, using config defaults:', geoErr);
       }
-    } catch (geoErr) {
-      console.warn('[GeoResolver] Failed to resolve geo from IP, using config defaults:', geoErr);
-      // Continue with whatever timezone/locale is in the saved config
     }
 
     // Select the browser type based on profile configuration
@@ -250,71 +246,26 @@ export class ProfileManager {
 
     // Auto-detect Chromium version and fix User-Agent to match actual browser
     // First, check if real Chrome is installed
-    let useRealChrome = false;
-    if (row.browser_type !== 'firefox') {
-      try {
-        const possiblePaths = [
-          process.env['PROGRAMFILES'] + '\\Google\\Chrome\\Application\\chrome.exe',
-          process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
-          process.env['LOCALAPPDATA'] + '\\Google\\Chrome\\Application\\chrome.exe',
-        ];
-        for (const chromePath of possiblePaths) {
-          if (chromePath && fs.existsSync(chromePath)) {
-            useRealChrome = true;
-            console.log(`[Browser] Found real Chrome at: ${chromePath}`);
-            break;
-          }
-        }
-      } catch {
-        // Ignore — will use Playwright Chromium
-      }
-    }
+    const useRealChrome = false; // Use Playwright's bundled Chromium
 
     let effectiveUserAgent = fpConfig?.userAgent || '';
     if (effectiveUserAgent && row.browser_type !== 'firefox') {
       try {
-        if (useRealChrome) {
-          // For real Chrome: detect version from registry or executable
-          const { execSync } = await import('child_process');
-          try {
-            const regOutput = execSync(
-              'reg query "HKLM\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
-              { timeout: 3000 }
-            ).toString();
-            const vMatch = regOutput.match(/(\d+\.\d+\.\d+\.\d+)/);
-            if (vMatch) {
-              effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${vMatch[1]}`);
-              console.log(`[UA] Real Chrome version: ${vMatch[1]}`);
-            }
-          } catch {
-            // Try HKCU
-            try {
-              const regOutput = execSync(
-                'reg query "HKCU\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
-                { timeout: 3000 }
-              ).toString();
-              const vMatch = regOutput.match(/(\d+\.\d+\.\d+\.\d+)/);
-              if (vMatch) {
-                effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${vMatch[1]}`);
-                console.log(`[UA] Real Chrome version (HKCU): ${vMatch[1]}`);
-              }
-            } catch {
-              // Fall through to browsers.json
-            }
-          }
-        }
-
-        // Fallback: read from playwright-core's browsers.json
-        if (effectiveUserAgent.includes('Chrome/120') || !useRealChrome) {
-          const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
-          const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
-          if (fs.existsSync(browsersJsonPath)) {
-            const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
-            const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
-            if (chromiumEntry?.browserVersion) {
-              const realVersion = chromiumEntry.browserVersion;
-              effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${realVersion}`);
-              console.log(`[UA] Playwright Chromium version: ${realVersion}`);
+        // Read version from playwright-core's browsers.json
+        const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
+        const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
+        if (fs.existsSync(browsersJsonPath)) {
+          const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
+          const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
+          if (chromiumEntry?.browserVersion) {
+            // Playwright version is like 147.0.7727.15 (dev build)
+            // Chrome stable is like 147.0.7727.102
+            // Use same major.minor.build but replace patch with realistic stable number
+            const parts = chromiumEntry.browserVersion.split('.');
+            if (parts.length === 4) {
+              const stableVersion = `${parts[0]}.${parts[1]}.${parts[2]}.100`;
+              effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${stableVersion}`);
+              console.log(`[UA] Set Chrome stable version: ${stableVersion} (Playwright: ${chromiumEntry.browserVersion})`);
             }
           }
         }
@@ -331,10 +282,9 @@ export class ProfileManager {
     const launchOptions: Record<string, unknown> = {
       headless: false,
       args: row.browser_type === 'firefox' ? [] : chromiumArgs,
-      // Set viewport to null — let the browser manage its own size via --window-size arg
-      // This prevents viewport from overriding screen.width/height
+      // Viewport must be null so CDP Emulation controls screen size entirely
       viewport: null,
-      // Screen = monitor resolution (for screen.width/height)
+      // Screen hint for Playwright (CDP will override this)
       screen: { width: screenW, height: screenH },
       ignoreDefaultArgs: ['--enable-automation'],
       colorScheme: 'light',
@@ -379,33 +329,133 @@ export class ProfileManager {
     });
 
     // Anti-bot detection via CDP — set properties at browser engine level (undetectable)
-    // This is more reliable than JS Object.defineProperty which bot detectors can spot
+    // Use browser-level CDP session so scripts apply to ALL pages/tabs
+    const screenW2 = fpConfig?.screen?.width || 1920;
+    const screenH2 = fpConfig?.screen?.height || 1080;
+    const colorDepth2 = fpConfig?.screen?.colorDepth || 24;
+    const cpuCores = fpConfig?.cpu?.cores || 4;
+    const ramGB = fpConfig?.ram?.sizeGB || 8;
     try {
-      const cdpSession = await context.newCDPSession(context.pages()[0] || await context.newPage());
+      // Get CDP session for each page (including future pages)
+      const injectViaCDP = async (page: import('playwright').Page) => {
+        try {
+          const cdp = await context.newCDPSession(page);
 
-      // Remove navigator.webdriver at CDP level — makes it truly undefined
-      await cdpSession.send('Page.addScriptToEvaluateOnNewDocument', {
-        source: `
-          // Delete webdriver property entirely (not set to false — that's detectable)
-          const origDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-          if (origDesc) {
-            Object.defineProperty(Navigator.prototype, 'webdriver', {
-              get: new Proxy(origDesc.get, {
-                apply: () => undefined
-              })
+          // Use Emulation domain to override screen metrics at engine level
+          await cdp.send('Emulation.setDeviceMetricsOverride', {
+            width: screenW2,
+            height: screenH2,
+            deviceScaleFactor: 1,
+            mobile: false,
+            screenWidth: screenW2,
+            screenHeight: screenH2,
+            screenOrientation: { type: 'landscapePrimary', angle: 0 },
+          });
+
+          // Override hardware concurrency (CPU cores) at engine level
+          try {
+            await cdp.send('Emulation.setHardwareConcurrencyOverride', {
+              hardwareConcurrency: cpuCores,
             });
+          } catch {
+            // Older Chromium versions may not support this
           }
-        `
-      });
 
-      await cdpSession.detach();
+          await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+            source: `
+              (function() {
+                // --- webdriver: make it undefined ---
+                try {
+                  const wdDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+                  if (wdDesc && wdDesc.get) {
+                    Object.defineProperty(Navigator.prototype, 'webdriver', {
+                      get: new Proxy(wdDesc.get, { apply: () => undefined }),
+                      configurable: true, enumerable: true
+                    });
+                  }
+                } catch(e) {}
+
+                // --- hardwareConcurrency ---
+                try {
+                  const hcDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'hardwareConcurrency');
+                  if (hcDesc && hcDesc.get) {
+                    Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
+                      get: new Proxy(hcDesc.get, { apply: () => ${cpuCores} }),
+                      configurable: true, enumerable: true
+                    });
+                  }
+                } catch(e) {}
+
+                // --- deviceMemory ---
+                try {
+                  const dmDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory');
+                  if (dmDesc && dmDesc.get) {
+                    Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+                      get: new Proxy(dmDesc.get, { apply: () => ${ramGB} }),
+                      configurable: true, enumerable: true
+                    });
+                  }
+                } catch(e) {}
+
+                // --- Screen properties ---
+                const screenProps = {
+                  width: ${screenW2}, height: ${screenH2},
+                  availWidth: ${screenW2}, availHeight: ${screenH2 - 40},
+                  colorDepth: ${colorDepth2}, pixelDepth: ${colorDepth2}
+                };
+                for (const [prop, val] of Object.entries(screenProps)) {
+                  try {
+                    const desc = Object.getOwnPropertyDescriptor(Screen.prototype, prop);
+                    if (desc && desc.get) {
+                      // Accessor property — wrap with Proxy
+                      Object.defineProperty(Screen.prototype, prop, {
+                        get: new Proxy(desc.get, { apply: () => val }),
+                        configurable: true, enumerable: true
+                      });
+                    } else {
+                      // Data property or missing — define as accessor on prototype
+                      Object.defineProperty(Screen.prototype, prop, {
+                        get() { return val; },
+                        configurable: true, enumerable: true
+                      });
+                    }
+                  } catch(e) {}
+                  // Also override on the screen instance directly as fallback
+                  try {
+                    Object.defineProperty(screen, prop, {
+                      get() { return val; },
+                      configurable: true, enumerable: true
+                    });
+                  } catch(e) {}
+                }
+
+                // --- Clean Playwright artifacts ---
+                delete window.__playwright;
+                delete window.__pw_manual;
+                delete window.__pwInitScripts;
+              })();
+            `
+          });
+        } catch(e) {
+          // CDP may fail for some pages
+        }
+      };
+
+      // Inject into all existing pages
+      for (const page of context.pages()) {
+        await injectViaCDP(page);
+      }
+
+      // Inject into all future pages
+      context.on('page', (page) => {
+        injectViaCDP(page);
+      });
     } catch {
-      // CDP not available (e.g., Firefox) — fall back to basic cleanup
+      // CDP not available (e.g., Firefox) — fall back to addInitScript
+      console.warn('[Spoof] CDP not available, falling back to addInitScript');
     }
 
-    // Lightweight anti-bot: only clean up Playwright-specific artifacts
-    // Do NOT override navigator.plugins, navigator.languages, navigator.platform
-    // — those overrides are detectable and Playwright/launch options already handle them
+    // Fallback: addInitScript for browsers that don't support CDP
     await context.addInitScript(`
       // Remove Playwright-specific global properties
       if (typeof window !== 'undefined') {
@@ -416,7 +466,6 @@ export class ProfileManager {
         // Ensure chrome object exists with runtime (real Chrome always has this)
         if (!window.chrome) window.chrome = {};
         if (!window.chrome.runtime) {
-          // Create a minimal chrome.runtime that passes basic checks
           Object.defineProperty(window.chrome, 'runtime', {
             value: Object.create(null),
             writable: false,
@@ -490,62 +539,9 @@ export class ProfileManager {
       // Ignore tab restore errors
     }
 
-    // Inject fingerprint spoofing scripts via addInitScript with Proxy wrappers
-    // Proxy preserves native toString() behavior, making overrides harder to detect
+    // Inject fingerprint spoofing scripts — WebRTC and Canvas only
+    // (Hardware, Platform, Screen are handled by CDP above)
     if (fpConfig) {
-      // Hardware + Platform spoofing
-      const spoofParts: string[] = [];
-
-      if (fpConfig.cpu?.cores || fpConfig.ram?.sizeGB) {
-        const cores = fpConfig.cpu?.cores || 4;
-        const ram = fpConfig.ram?.sizeGB || 8;
-        spoofParts.push(`
-          // Hardware Concurrency
-          (function() {
-            const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'hardwareConcurrency');
-            if (desc && desc.get) {
-              Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
-                get: new Proxy(desc.get, { apply: () => ${cores} }),
-                configurable: true, enumerable: true
-              });
-            }
-          })();
-          // Device Memory
-          (function() {
-            const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory');
-            if (desc && desc.get) {
-              Object.defineProperty(Navigator.prototype, 'deviceMemory', {
-                get: new Proxy(desc.get, { apply: () => ${ram} }),
-                configurable: true, enumerable: true
-              });
-            } else {
-              Object.defineProperty(Navigator.prototype, 'deviceMemory', {
-                get: () => ${ram},
-                configurable: true, enumerable: true
-              });
-            }
-          })();
-        `);
-      }
-
-      if (fpConfig.platform) {
-        spoofParts.push(`
-          (function() {
-            const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
-            if (desc && desc.get) {
-              Object.defineProperty(Navigator.prototype, 'platform', {
-                get: new Proxy(desc.get, { apply: () => ${JSON.stringify(fpConfig.platform)} }),
-                configurable: true, enumerable: true
-              });
-            }
-          })();
-        `);
-      }
-
-      if (spoofParts.length > 0) {
-        await context.addInitScript(spoofParts.join('\n'));
-      }
-
       // WebRTC spoofing — Chromium args handle most of it, JS is backup
       if (fpConfig.webrtc === 'disable') {
         await context.addInitScript(`
@@ -617,38 +613,7 @@ export class ProfileManager {
           };
         `);
       }
-
-      // Screen resolution spoofing — use Proxy on Screen.prototype for stealth
-      if (fpConfig.screen) {
-        const sw = fpConfig.screen.width || 1920;
-        const sh = fpConfig.screen.height || 1080;
-        const cd = fpConfig.screen.colorDepth || 24;
-        await context.addInitScript(`
-          (function() {
-            const W = ${sw}, H = ${sh}, CD = ${cd}, AW = ${sw}, AH = ${sh} - 40;
-            const props = {
-              width: W, height: H,
-              availWidth: AW, availHeight: AH,
-              colorDepth: CD, pixelDepth: CD
-            };
-            for (const [prop, val] of Object.entries(props)) {
-              try {
-                const desc = Object.getOwnPropertyDescriptor(Screen.prototype, prop);
-                if (desc && desc.get) {
-                  Object.defineProperty(Screen.prototype, prop, {
-                    get: new Proxy(desc.get, { apply: () => val }),
-                    configurable: true, enumerable: true
-                  });
-                } else {
-                  Object.defineProperty(screen, prop, {
-                    get: () => val, configurable: true, enumerable: true
-                  });
-                }
-              } catch(e) {}
-            }
-          })();
-        `);
-      }
+      // (Screen, Hardware, Platform spoofing handled by CDP injection above)
     }
 
     // Get the browser's CDP endpoint for external tools
