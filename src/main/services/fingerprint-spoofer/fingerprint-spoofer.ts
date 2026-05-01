@@ -16,6 +16,8 @@ import {
   generateUserAgentScript,
   generateFontListScript,
   generateWebRTCScript,
+  generateTimezoneLocaleScript,
+  generateScreenScript,
 } from './injection-scripts';
 
 /** Minimal interface for a Playwright BrowserContext used by applyFingerprint. */
@@ -147,6 +149,11 @@ export class FingerprintSpoofer {
 
     const webrtcScript = generateWebRTCScript(fingerprint.config.webrtc);
 
+    // Generate timezone/locale injection script if configured
+    const timezoneLocaleScript = fingerprint.config.timezone && fingerprint.config.locale
+      ? generateTimezoneLocaleScript(fingerprint.config.timezone, fingerprint.config.locale)
+      : '';
+
     await browser.addInitScript(canvasScript);
     await browser.addInitScript(webglScript);
     await browser.addInitScript(audioScript);
@@ -157,6 +164,21 @@ export class FingerprintSpoofer {
     // Only inject WebRTC script if it's non-empty (mode !== 'real')
     if (webrtcScript.length > 0) {
       await browser.addInitScript(webrtcScript);
+    }
+
+    // Inject timezone/locale spoofing
+    if (timezoneLocaleScript.length > 0) {
+      await browser.addInitScript(timezoneLocaleScript);
+    }
+
+    // Inject screen resolution spoofing
+    if (fingerprint.config.screen) {
+      const screenScript = generateScreenScript(
+        fingerprint.config.screen.width,
+        fingerprint.config.screen.height,
+        fingerprint.config.screen.colorDepth,
+      );
+      await browser.addInitScript(screenScript);
     }
   }
 }

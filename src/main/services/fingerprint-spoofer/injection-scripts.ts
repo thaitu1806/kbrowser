@@ -324,6 +324,91 @@ export function generateFontListScript(fonts: string[]): string {
 }
 
 /**
+ * Generate a JavaScript injection script that spoofs screen resolution properties.
+ * Overrides screen.width, screen.height, screen.availWidth, screen.availHeight,
+ * screen.colorDepth, and screen.pixelDepth to present consistent values.
+ *
+ * @param width - Screen width in pixels (e.g., 1920)
+ * @param height - Screen height in pixels (e.g., 1080)
+ * @param colorDepth - Color depth in bits (e.g., 24)
+ * @returns Self-executing JavaScript string
+ */
+export function generateScreenScript(width: number, height: number, colorDepth: number): string {
+  return `(function() {
+  'use strict';
+  const W = ${width};
+  const H = ${height};
+  const CD = ${colorDepth};
+  // Taskbar takes ~40px, so availHeight = height - 40
+  const AH = H - 40;
+
+  Object.defineProperty(screen, 'width', { get: () => W, configurable: true });
+  Object.defineProperty(screen, 'height', { get: () => H, configurable: true });
+  Object.defineProperty(screen, 'availWidth', { get: () => W, configurable: true });
+  Object.defineProperty(screen, 'availHeight', { get: () => AH, configurable: true });
+  Object.defineProperty(screen, 'colorDepth', { get: () => CD, configurable: true });
+  Object.defineProperty(screen, 'pixelDepth', { get: () => CD, configurable: true });
+
+  // Also spoof window.outerWidth/outerHeight to match
+  // (these should be <= screen size)
+  const origOuterW = Object.getOwnPropertyDescriptor(window, 'outerWidth');
+  const origOuterH = Object.getOwnPropertyDescriptor(window, 'outerHeight');
+  Object.defineProperty(window, 'outerWidth', {
+    get: function() { const v = origOuterW && origOuterW.get ? origOuterW.get.call(this) : W; return Math.min(v, W); },
+    configurable: true
+  });
+  Object.defineProperty(window, 'outerHeight', {
+    get: function() { const v = origOuterH && origOuterH.get ? origOuterH.get.call(this) : H; return Math.min(v, H); },
+    configurable: true
+  });
+})();`;
+}
+
+/**
+ * Generate a JavaScript injection script that spoofs timezone-related APIs.
+ * Overrides Intl.DateTimeFormat resolvedOptions and navigator.language/languages
+ * to match the configured locale.
+ *
+ * Note: Playwright's timezoneId and locale launch options handle most timezone
+ * spoofing at the browser engine level. This script provides extra hardening
+ * for edge cases where sites use additional detection methods.
+ *
+ * @param timezone - IANA timezone string (e.g., 'America/Los_Angeles')
+ * @param locale - BCP 47 locale string (e.g., 'en-US')
+ * @returns Self-executing JavaScript string
+ */
+export function generateTimezoneLocaleScript(timezone: string, locale: string): string {
+  return `(function() {
+  'use strict';
+  const TARGET_TIMEZONE = ${JSON.stringify(timezone)};
+  const TARGET_LOCALE = ${JSON.stringify(locale)};
+  const TARGET_LANG = TARGET_LOCALE.split('-')[0];
+
+  // Spoof navigator.language and navigator.languages
+  Object.defineProperty(navigator, 'language', {
+    get: function() { return TARGET_LOCALE; },
+    configurable: true,
+    enumerable: true
+  });
+  Object.defineProperty(navigator, 'languages', {
+    get: function() { return [TARGET_LOCALE, TARGET_LANG]; },
+    configurable: true,
+    enumerable: true
+  });
+
+  // Ensure Intl.DateTimeFormat always returns the target timezone
+  const OrigDateTimeFormat = Intl.DateTimeFormat;
+  Intl.DateTimeFormat = function(locales, options) {
+    locales = locales || TARGET_LOCALE;
+    options = Object.assign({}, options, { timeZone: options && options.timeZone ? options.timeZone : TARGET_TIMEZONE });
+    return new OrigDateTimeFormat(locales, options);
+  };
+  Intl.DateTimeFormat.prototype = OrigDateTimeFormat.prototype;
+  Intl.DateTimeFormat.supportedLocalesOf = OrigDateTimeFormat.supportedLocalesOf;
+})();`;
+}
+
+/**
  * Generate a JavaScript injection script for WebRTC spoofing.
  *
  * @param mode - 'disable' to block WebRTC entirely, 'proxy' to hide local IPs,

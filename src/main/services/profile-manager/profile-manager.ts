@@ -14,6 +14,7 @@ import { chromium, firefox } from 'playwright';
 import type { BrowserContext } from 'playwright';
 import type { ProfileConfig, Profile, ProfileSummary, BrowserConnection } from '../../../shared/types';
 import { AppErrorCode } from '../../../shared/types';
+import { resolveGeoFromProxy, resolveGeoFromIP } from '../geo-resolver';
 
 /** Storage types that each profile gets isolated directories for. */
 const STORAGE_TYPES = ['cookie', 'localstorage', 'indexeddb', 'cache'] as const;
@@ -180,28 +181,97 @@ export class ProfileManager {
     // Parse fingerprint config
     const fpConfig = row.fingerprint_config ? JSON.parse(row.fingerprint_config) : null;
 
+    // Auto-resolve timezone & locale from proxy IP before launching browser
+    try {
+      let geoInfo;
+      if (proxyOption) {
+        // Resolve through proxy to get the exit IP's geo data
+        const proxyForGeo = {
+          protocol: row.proxy_id ? (this.db.prepare('SELECT protocol FROM proxies WHERE id = ?').get(row.proxy_id) as { protocol: string })?.protocol || 'http' : 'http',
+          host: proxyOption.server.replace(/^.*:\/\//, '').split(':')[0],
+          port: parseInt(proxyOption.server.split(':').pop() || '0', 10),
+          username: proxyOption.username,
+          password: proxyOption.password,
+        };
+        geoInfo = await resolveGeoFromProxy(proxyForGeo);
+      } else {
+        // No proxy — resolve from direct IP
+        geoInfo = await resolveGeoFromIP();
+      }
+
+      if (geoInfo && fpConfig) {
+        fpConfig.timezone = geoInfo.timezone;
+        fpConfig.locale = geoInfo.locale;
+        console.log(`[GeoResolver] IP: ${geoInfo.ip} → timezone: ${geoInfo.timezone}, locale: ${geoInfo.locale} (${geoInfo.city}, ${geoInfo.country})`);
+      }
+    } catch (geoErr) {
+      console.warn('[GeoResolver] Failed to resolve geo from IP, using config defaults:', geoErr);
+      // Continue with whatever timezone/locale is in the saved config
+    }
+
     // Select the browser type based on profile configuration
     const browserType = row.browser_type === 'firefox' ? firefox : chromium;
+
+    // Build Chromium args — include WebRTC IP handling policy based on config
+    const webrtcMode = fpConfig?.webrtc || 'disable';
+    const effectiveLocale = fpConfig?.locale || 'en-US';
+    const effectiveLang = effectiveLocale.split('-')[0];
+    const chromiumArgs = [
+      '--disable-blink-features=AutomationControlled',
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-infobars',
+      '--disable-notifications',
+      '--no-sandbox',
+      '--disable-gpu-sandbox',
+      '--disable-component-update',
+      '--disable-background-networking',
+      '--disable-dev-shm-usage',
+      '--test-type',
+      // Anti-bot detection
+      '--disable-features=AutomationControlled,WebRtcHideLocalIpsWithMdns',
+      // Set browser language at Chromium engine level — this controls Accept-Language header
+      `--lang=${effectiveLocale}`,
+      `--accept-lang=${effectiveLocale},${effectiveLang};q=0.9`,
+    ];
+
+    // WebRTC leak prevention at browser engine level
+    if (webrtcMode === 'disable') {
+      chromiumArgs.push('--disable-webrtc');
+      chromiumArgs.push('--enforce-webrtc-ip-permission-check');
+      chromiumArgs.push('--webrtc-ip-handling-policy=disable_non_proxied_udp');
+    } else if (webrtcMode === 'proxy') {
+      chromiumArgs.push('--force-webrtc-ip-handling-policy');
+      chromiumArgs.push('--webrtc-ip-handling-policy=disable_non_proxied_udp');
+      chromiumArgs.push('--enforce-webrtc-ip-permission-check');
+    }
+
+    // Auto-detect Chromium version and fix User-Agent to match actual browser
+    let effectiveUserAgent = fpConfig?.userAgent || '';
+    if (effectiveUserAgent && row.browser_type !== 'firefox') {
+      try {
+        // Read version from playwright-core's browsers.json
+        const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
+        const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
+        if (fs.existsSync(browsersJsonPath)) {
+          const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
+          const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
+          if (chromiumEntry?.browserVersion) {
+            const realVersion = chromiumEntry.browserVersion;
+            effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${realVersion}`);
+            console.log(`[UA] Auto-fixed Chrome version in User-Agent: ${realVersion}`);
+          }
+        }
+      } catch {
+        console.warn('[UA] Could not auto-detect Chromium version, using configured UA');
+      }
+    }
 
     // Build launch options
     const launchOptions: Record<string, unknown> = {
       headless: false,
-      args: row.browser_type === 'firefox'
-        ? []
-        : [
-            '--disable-blink-features=AutomationControlled',
-            '--no-first-run',
-            '--no-default-browser-check',
-            '--disable-infobars',
-            '--disable-notifications',
-            '--no-sandbox',
-            '--disable-gpu-sandbox',
-            '--disable-component-update',
-            '--disable-background-networking',
-            '--disable-dev-shm-usage',
-            '--test-type',
-          ],
-      viewport: null,
+      args: row.browser_type === 'firefox' ? [] : chromiumArgs,
+      viewport: fpConfig?.screen ? { width: fpConfig.screen.width, height: fpConfig.screen.height - 80 } : null,
       ignoreDefaultArgs: ['--enable-automation'],
       env: {
         ...process.env,
@@ -211,12 +281,84 @@ export class ProfileManager {
       },
       // Apply proxy if configured
       ...(proxyOption ? { proxy: proxyOption } : {}),
-      // Apply User-Agent if configured
-      ...(fpConfig?.userAgent ? { userAgent: fpConfig.userAgent } : {}),
+      // Apply User-Agent — use auto-fixed version
+      ...(effectiveUserAgent ? { userAgent: effectiveUserAgent } : {}),
+      // Apply timezone spoofing (match proxy/IP location)
+      ...(fpConfig?.timezone ? { timezoneId: fpConfig.timezone } : {}),
+      // Apply locale spoofing
+      ...(fpConfig?.locale ? { locale: fpConfig.locale } : {}),
+      // Set Accept-Language header with proper quality values to match navigator.languages
+      extraHTTPHeaders: {
+        'Accept-Language': fpConfig?.locale
+          ? `${fpConfig.locale},${fpConfig.locale.split('-')[0]};q=0.9`
+          : 'en-US,en;q=0.9',
+      },
     };
 
     // Launch persistent browser context with isolated user data dir
     const context = await browserType.launchPersistentContext(profileDir, launchOptions);
+
+    // Force correct Accept-Language header on ALL requests via route interception
+    const acceptLangHeader = fpConfig?.locale
+      ? `${fpConfig.locale},${fpConfig.locale.split('-')[0]};q=0.9`
+      : 'en-US,en;q=0.9';
+    await context.route('**/*', (route) => {
+      route.continue({
+        headers: {
+          ...route.request().headers(),
+          'accept-language': acceptLangHeader,
+        },
+      });
+    });
+
+    // Anti-bot detection: remove automation indicators BEFORE any page loads
+    await context.addInitScript(`
+      // Remove webdriver flag
+      Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+
+      // Remove Playwright/automation-specific properties
+      delete window.__playwright;
+      delete window.__pw_manual;
+
+      // Fix chrome.runtime to look like a real browser
+      if (!window.chrome) window.chrome = {};
+      if (!window.chrome.runtime) {
+        window.chrome.runtime = {
+          connect: function() {},
+          sendMessage: function() {},
+          id: undefined,
+        };
+      }
+
+      // Fix permissions API
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = function(parameters) {
+        if (parameters.name === 'notifications') {
+          return Promise.resolve({ state: Notification.permission });
+        }
+        return originalQuery.call(this, parameters);
+      };
+
+      // Fix plugins to look like a real Chrome browser
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+          const plugins = [
+            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+          ];
+          plugins.length = 3;
+          return plugins;
+        },
+        configurable: true,
+      });
+
+      // Fix languages to match locale config
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ${JSON.stringify(fpConfig?.locale ? [fpConfig.locale, fpConfig.locale.split('-')[0]] : ['en-US', 'en'])},
+        configurable: true,
+      });
+    `);
 
     // Restore saved cookies from database
     try {
@@ -296,6 +438,49 @@ export class ProfileManager {
             window.RTCPeerConnection = function() { throw new DOMException('WebRTC disabled', 'NotSupportedError'); };
             window.RTCPeerConnection.prototype = {};
             if ('webkitRTCPeerConnection' in window) window.webkitRTCPeerConnection = window.RTCPeerConnection;
+            if ('mozRTCPeerConnection' in window) window.mozRTCPeerConnection = window.RTCPeerConnection;
+            // Also block RTCSessionDescription and RTCIceCandidate
+            window.RTCSessionDescription = function() { throw new DOMException('WebRTC disabled', 'NotSupportedError'); };
+            window.RTCIceCandidate = function() { throw new DOMException('WebRTC disabled', 'NotSupportedError'); };
+            // Block navigator.mediaDevices.getUserMedia for WebRTC
+            if (navigator.mediaDevices) {
+              navigator.mediaDevices.getUserMedia = function() { return Promise.reject(new DOMException('WebRTC disabled', 'NotAllowedError')); };
+            }
+          }
+        `);
+      } else if (fpConfig.webrtc === 'proxy') {
+        // Proxy mode: intercept RTCPeerConnection to filter out host candidates (local IP)
+        await context.addInitScript(`
+          if (typeof window !== 'undefined' && typeof RTCPeerConnection !== 'undefined') {
+            const OrigRTC = RTCPeerConnection;
+            window.RTCPeerConnection = function(config) {
+              config = config || {};
+              config.iceTransportPolicy = 'relay';
+              const pc = new OrigRTC(config);
+              // Wrap onicecandidate setter to filter host candidates
+              const origDesc = Object.getOwnPropertyDescriptor(RTCPeerConnection.prototype, 'onicecandidate') || {};
+              let userHandler = null;
+              Object.defineProperty(pc, 'onicecandidate', {
+                get() { return userHandler; },
+                set(fn) {
+                  userHandler = fn;
+                  if (origDesc.set) {
+                    origDesc.set.call(pc, function(event) {
+                      if (event.candidate && event.candidate.candidate) {
+                        if (event.candidate.candidate.indexOf('typ host') !== -1) return;
+                        if (event.candidate.candidate.indexOf('typ srflx') !== -1) return;
+                      }
+                      if (fn) fn.call(this, event);
+                    });
+                  }
+                },
+                configurable: true
+              });
+              return pc;
+            };
+            window.RTCPeerConnection.prototype = OrigRTC.prototype;
+            window.RTCPeerConnection.generateCertificate = OrigRTC.generateCertificate;
+            if ('webkitRTCPeerConnection' in window) window.webkitRTCPeerConnection = window.RTCPeerConnection;
           }
         `);
       }
@@ -315,6 +500,24 @@ export class ProfileManager {
             }
             return origToDataURL.apply(this, arguments);
           };
+        `);
+      }
+
+      // Screen resolution spoofing
+      if (fpConfig.screen) {
+        const sw = fpConfig.screen.width || 1920;
+        const sh = fpConfig.screen.height || 1080;
+        const cd = fpConfig.screen.colorDepth || 24;
+        await context.addInitScript(`
+          (function() {
+            const W = ${sw}, H = ${sh}, CD = ${cd}, AH = ${sh} - 40;
+            Object.defineProperty(screen, 'width', { get: () => W, configurable: true });
+            Object.defineProperty(screen, 'height', { get: () => H, configurable: true });
+            Object.defineProperty(screen, 'availWidth', { get: () => W, configurable: true });
+            Object.defineProperty(screen, 'availHeight', { get: () => AH, configurable: true });
+            Object.defineProperty(screen, 'colorDepth', { get: () => CD, configurable: true });
+            Object.defineProperty(screen, 'pixelDepth', { get: () => CD, configurable: true });
+          })();
         `);
       }
     }
@@ -499,6 +702,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <span class="icon">🌐</span>
     <div class="text"><h3>IP / DNS Leak</h3><p>IP address, DNS, proxy detection</p></div>
   </div>
+  <div class="card" onclick="window.open('https://www.browserscan.net/IPLocation','_blank')">
+    <span class="icon">📍</span>
+    <div class="text"><h3>BrowserScan IP Location</h3><p>IP location, timezone, language check</p></div>
+  </div>
   <div class="card" onclick="window.open('https://whatismybrowser.com','_blank')">
     <span class="icon">🧭</span>
     <div class="text"><h3>User-Agent / OS</h3><p>Browser detection details</p></div>
@@ -541,7 +748,7 @@ items.forEach(([l,v])=>{
 });
 
 function openAll(){
-  const urls=['https://browserleaks.com','https://abrahamjuliot.github.io/creepjs/','https://bot.sannysoft.com','https://pixelscan.net','https://ipleak.net'];
+  const urls=['https://browserleaks.com','https://abrahamjuliot.github.io/creepjs/','https://bot.sannysoft.com','https://pixelscan.net','https://ipleak.net','https://www.browserscan.net/IPLocation'];
   urls.forEach(u=>window.open(u,'_blank'));
 }
 </script>

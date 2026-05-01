@@ -1,0 +1,57 @@
+╔══════════════════════════════════════════════════════╗
+║   Ken's Browser IM - Hướng dẫn cài đặt máy mới     ║
+╚══════════════════════════════════════════════════════╝
+
+Trên máy mới, bạn cần cài 2 thứ theo thứ tự:
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BƯỚC 1: Cài Node.js
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Vào trang: https://nodejs.org
+  2. Tải bản LTS (nút màu xanh lá, bên trái)
+  3. Chạy file .msi vừa tải, cứ Next → Next → Finish
+  4. Mở CMD hoặc PowerShell, gõ kiểm tra:
+
+     node -v
+     npm -v
+
+     Nếu hiện số version là OK.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BƯỚC 2: Cài Playwright Browsers
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Cách 1 (Tự động):
+  ------------------
+  Double-click file "setup-playwright.bat"
+  Script sẽ tự kiểm tra và cài đặt.
+
+  Cách 2 (Thủ công):
+  ------------------
+  Mở CMD hoặc PowerShell, chạy lệnh:
+
+     npx playwright@1.59.1 install
+
+  Đợi 5-10 phút để tải browsers (Chromium, Firefox, WebKit).
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BƯỚC 3: Chạy app
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Double-click file "KenBrowserIM.exe"
+  Xong!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GHI CHÚ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  • Playwright version phải đúng 1.59.1 (đã ghi sẵn trong lệnh)
+  • Chỉ cần cài 1 lần, không cần cài lại mỗi lần chạy app
+  • Nếu update app lên version mới có thể cần chạy lại bước 2
+  • Không cần cài Python, Visual Studio, hay bất kỳ thứ gì khác
+

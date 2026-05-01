@@ -25,6 +25,13 @@ export interface FingerprintConfig {
     platform: string;
     appVersion: string;
     oscpu: string;
+    timezone: string;
+    locale: string;
+    screen: {
+        width: number;
+        height: number;
+        colorDepth: number;
+    };
 }
 /** Generated fingerprint data including seeds for deterministic noise. */
 export interface FingerprintData {

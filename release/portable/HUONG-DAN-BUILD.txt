@@ -1,0 +1,82 @@
+╔══════════════════════════════════════════════════════╗
+║   Ken's Browser IM - Hướng dẫn build Portable       ║
+╚══════════════════════════════════════════════════════╝
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YÊU CẦU MÁY BUILD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  • Node.js (LTS) — https://nodejs.org
+  • Git            — https://git-scm.com
+  • Python 3.x     — https://python.org  (cho native modules)
+  • Visual Studio Build Tools với C++ workload
+    (hoặc tick "Tools for Native Modules" khi cài Node.js)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CÁC LỆNH BUILD (chạy theo thứ tự)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. Clone repo (nếu chưa có):
+
+     git clone <repo-url>
+     cd kens-browser-im
+
+  2. Cài dependencies:
+
+     npm install
+
+     (Lệnh này cũng tự chạy electron-rebuild qua postinstall)
+
+  3. Build portable exe (1 lệnh duy nhất):
+
+     npm run dist
+
+     Lệnh này sẽ:
+       → Build renderer (Vite)    : npm run build:renderer
+       → Build main (TypeScript)  : npm run build:main
+       → Đóng gói Electron        : electron-builder --portable
+
+  4. File output nằm tại:
+
+     release/KensBrowserIM-0.1.0-portable.exe
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TÓM TẮT NHANH (copy-paste)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+     npm install
+     npm run dist
+
+  Chỉ 2 lệnh là xong.
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LỆNH BUILD TỪNG BƯỚC (nếu cần debug)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Build renderer (React/Vite):
+     npm run build:renderer
+
+  Build main process (TypeScript):
+     npm run build:main
+
+  Chỉ đóng gói (không build lại):
+     npx electron-builder
+
+  Build + đóng gói thư mục (không nén exe, để test):
+     npm run pack
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GHI CHÚ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  • Output portable exe nằm trong thư mục: release/
+  • Thư mục release/win-unpacked/ chứa bản giải nén (để debug)
+  • Nếu gặp lỗi native module, chạy: npx electron-rebuild
+  • Đổi version: sửa "version" trong package.json
+  • Đổi tên file exe: sửa "artifactName" trong package.json > build > portable
+
