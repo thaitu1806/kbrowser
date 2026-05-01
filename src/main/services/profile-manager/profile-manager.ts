@@ -335,11 +335,44 @@ export class ProfileManager {
     const colorDepth2 = fpConfig?.screen?.colorDepth || 24;
     const cpuCores = fpConfig?.cpu?.cores || 4;
     const ramGB = fpConfig?.ram?.sizeGB || 8;
+
+    // Parse Chrome version for Client Hints
+    const chromeVersionMatch = effectiveUserAgent.match(/Chrome\/([\d.]+)/);
+    const chromeFullVersion = chromeVersionMatch ? chromeVersionMatch[1] : '147.0.7727.100';
+    const chromeMajorVersion = chromeFullVersion.split('.')[0];
+
     try {
       // Get CDP session for each page (including future pages)
       const injectViaCDP = async (page: import('playwright').Page) => {
         try {
           const cdp = await context.newCDPSession(page);
+
+          // Override User-Agent AND Client Hints at engine level via CDP
+          // This controls: navigator.userAgent, navigator.userAgentData, Sec-CH-UA headers
+          await cdp.send('Emulation.setUserAgentOverride', {
+            userAgent: effectiveUserAgent,
+            platform: fpConfig?.platform || 'Win32',
+            userAgentMetadata: {
+              brands: [
+                { brand: 'Google Chrome', version: chromeMajorVersion },
+                { brand: 'Chromium', version: chromeMajorVersion },
+                { brand: 'Not-A.Brand', version: '24' },
+              ],
+              fullVersionList: [
+                { brand: 'Google Chrome', version: chromeFullVersion },
+                { brand: 'Chromium', version: chromeFullVersion },
+                { brand: 'Not-A.Brand', version: '24.0.0.0' },
+              ],
+              fullVersion: chromeFullVersion,
+              platform: 'Windows',
+              platformVersion: '10.0.0',
+              architecture: 'x86',
+              model: '',
+              mobile: false,
+              bitness: '64',
+              wow64: false,
+            },
+          });
 
           // Use Emulation domain to override screen metrics at engine level
           await cdp.send('Emulation.setDeviceMetricsOverride', {
@@ -433,6 +466,48 @@ export class ProfileManager {
                 delete window.__playwright;
                 delete window.__pw_manual;
                 delete window.__pwInitScripts;
+
+                // --- Spoof navigator.userAgentData (Client Hints) ---
+                if (navigator.userAgentData) {
+                  const brands = [
+                    { brand: 'Google Chrome', version: '${chromeMajorVersion}' },
+                    { brand: 'Chromium', version: '${chromeMajorVersion}' },
+                    { brand: 'Not-A.Brand', version: '24' },
+                  ];
+                  try {
+                    Object.defineProperty(navigator, 'userAgentData', {
+                      value: {
+                        brands: brands,
+                        mobile: false,
+                        platform: 'Windows',
+                        getHighEntropyValues: function(hints) {
+                          return Promise.resolve({
+                            brands: brands,
+                            mobile: false,
+                            platform: 'Windows',
+                            platformVersion: '10.0.0',
+                            architecture: 'x86',
+                            bitness: '64',
+                            model: '',
+                            uaFullVersion: '${chromeFullVersion}',
+                            fullVersionList: [
+                              { brand: 'Google Chrome', version: '${chromeFullVersion}' },
+                              { brand: 'Chromium', version: '${chromeFullVersion}' },
+                              { brand: 'Not-A.Brand', version: '24.0.0.0' },
+                            ],
+                            wow64: false,
+                          });
+                        },
+                        toJSON: function() {
+                          return { brands: brands, mobile: false, platform: 'Windows' };
+                        }
+                      },
+                      configurable: true,
+                      enumerable: true,
+                      writable: false,
+                    });
+                  } catch(e) {}
+                }
               })();
             `
           });
