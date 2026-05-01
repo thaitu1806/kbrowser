@@ -233,6 +233,8 @@ export class ProfileManager {
       // Set browser language at Chromium engine level — this controls Accept-Language header
       `--lang=${effectiveLocale}`,
       `--accept-lang=${effectiveLocale},${effectiveLang};q=0.9`,
+      // Set window size to match screen config
+      `--window-size=${fpConfig?.screen?.width || 1920},${fpConfig?.screen?.height || 1080}`,
     ];
 
     // WebRTC leak prevention at browser engine level
@@ -247,19 +249,73 @@ export class ProfileManager {
     }
 
     // Auto-detect Chromium version and fix User-Agent to match actual browser
+    // First, check if real Chrome is installed
+    let useRealChrome = false;
+    if (row.browser_type !== 'firefox') {
+      try {
+        const possiblePaths = [
+          process.env['PROGRAMFILES'] + '\\Google\\Chrome\\Application\\chrome.exe',
+          process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
+          process.env['LOCALAPPDATA'] + '\\Google\\Chrome\\Application\\chrome.exe',
+        ];
+        for (const chromePath of possiblePaths) {
+          if (chromePath && fs.existsSync(chromePath)) {
+            useRealChrome = true;
+            console.log(`[Browser] Found real Chrome at: ${chromePath}`);
+            break;
+          }
+        }
+      } catch {
+        // Ignore — will use Playwright Chromium
+      }
+    }
+
     let effectiveUserAgent = fpConfig?.userAgent || '';
     if (effectiveUserAgent && row.browser_type !== 'firefox') {
       try {
-        // Read version from playwright-core's browsers.json
-        const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
-        const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
-        if (fs.existsSync(browsersJsonPath)) {
-          const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
-          const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
-          if (chromiumEntry?.browserVersion) {
-            const realVersion = chromiumEntry.browserVersion;
-            effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${realVersion}`);
-            console.log(`[UA] Auto-fixed Chrome version in User-Agent: ${realVersion}`);
+        if (useRealChrome) {
+          // For real Chrome: detect version from registry or executable
+          const { execSync } = await import('child_process');
+          try {
+            const regOutput = execSync(
+              'reg query "HKLM\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
+              { timeout: 3000 }
+            ).toString();
+            const vMatch = regOutput.match(/(\d+\.\d+\.\d+\.\d+)/);
+            if (vMatch) {
+              effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${vMatch[1]}`);
+              console.log(`[UA] Real Chrome version: ${vMatch[1]}`);
+            }
+          } catch {
+            // Try HKCU
+            try {
+              const regOutput = execSync(
+                'reg query "HKCU\\SOFTWARE\\Google\\Chrome\\BLBeacon" /v version',
+                { timeout: 3000 }
+              ).toString();
+              const vMatch = regOutput.match(/(\d+\.\d+\.\d+\.\d+)/);
+              if (vMatch) {
+                effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${vMatch[1]}`);
+                console.log(`[UA] Real Chrome version (HKCU): ${vMatch[1]}`);
+              }
+            } catch {
+              // Fall through to browsers.json
+            }
+          }
+        }
+
+        // Fallback: read from playwright-core's browsers.json
+        if (effectiveUserAgent.includes('Chrome/120') || !useRealChrome) {
+          const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
+          const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
+          if (fs.existsSync(browsersJsonPath)) {
+            const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
+            const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
+            if (chromiumEntry?.browserVersion) {
+              const realVersion = chromiumEntry.browserVersion;
+              effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${realVersion}`);
+              console.log(`[UA] Playwright Chromium version: ${realVersion}`);
+            }
           }
         }
       } catch {
@@ -268,11 +324,22 @@ export class ProfileManager {
     }
 
     // Build launch options
+    const screenW = fpConfig?.screen?.width || 1920;
+    const screenH = fpConfig?.screen?.height || 1080;
+
+    // Try to use real Chrome instead of Playwright's Chromium (less detectable)
     const launchOptions: Record<string, unknown> = {
       headless: false,
       args: row.browser_type === 'firefox' ? [] : chromiumArgs,
-      viewport: fpConfig?.screen ? { width: fpConfig.screen.width, height: fpConfig.screen.height - 80 } : null,
+      // Set viewport to null — let the browser manage its own size via --window-size arg
+      // This prevents viewport from overriding screen.width/height
+      viewport: null,
+      // Screen = monitor resolution (for screen.width/height)
+      screen: { width: screenW, height: screenH },
       ignoreDefaultArgs: ['--enable-automation'],
+      colorScheme: 'light',
+      // Use real Chrome if available — much harder to detect as automation
+      ...(useRealChrome ? { channel: 'chrome' } : {}),
       env: {
         ...process.env,
         GOOGLE_API_KEY: 'no',
@@ -311,53 +378,64 @@ export class ProfileManager {
       });
     });
 
-    // Anti-bot detection: remove automation indicators BEFORE any page loads
+    // Anti-bot detection via CDP — set properties at browser engine level (undetectable)
+    // This is more reliable than JS Object.defineProperty which bot detectors can spot
+    try {
+      const cdpSession = await context.newCDPSession(context.pages()[0] || await context.newPage());
+
+      // Remove navigator.webdriver at CDP level — makes it truly undefined
+      await cdpSession.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: `
+          // Delete webdriver property entirely (not set to false — that's detectable)
+          const origDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+          if (origDesc) {
+            Object.defineProperty(Navigator.prototype, 'webdriver', {
+              get: new Proxy(origDesc.get, {
+                apply: () => undefined
+              })
+            });
+          }
+        `
+      });
+
+      await cdpSession.detach();
+    } catch {
+      // CDP not available (e.g., Firefox) — fall back to basic cleanup
+    }
+
+    // Lightweight anti-bot: only clean up Playwright-specific artifacts
+    // Do NOT override navigator.plugins, navigator.languages, navigator.platform
+    // — those overrides are detectable and Playwright/launch options already handle them
     await context.addInitScript(`
-      // Remove webdriver flag
-      Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+      // Remove Playwright-specific global properties
+      if (typeof window !== 'undefined') {
+        delete window.__playwright;
+        delete window.__pw_manual;
+        delete window.__pwInitScripts;
 
-      // Remove Playwright/automation-specific properties
-      delete window.__playwright;
-      delete window.__pw_manual;
-
-      // Fix chrome.runtime to look like a real browser
-      if (!window.chrome) window.chrome = {};
-      if (!window.chrome.runtime) {
-        window.chrome.runtime = {
-          connect: function() {},
-          sendMessage: function() {},
-          id: undefined,
-        };
-      }
-
-      // Fix permissions API
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = function(parameters) {
-        if (parameters.name === 'notifications') {
-          return Promise.resolve({ state: Notification.permission });
+        // Ensure chrome object exists with runtime (real Chrome always has this)
+        if (!window.chrome) window.chrome = {};
+        if (!window.chrome.runtime) {
+          // Create a minimal chrome.runtime that passes basic checks
+          Object.defineProperty(window.chrome, 'runtime', {
+            value: Object.create(null),
+            writable: false,
+            enumerable: true,
+            configurable: false
+          });
         }
-        return originalQuery.call(this, parameters);
-      };
 
-      // Fix plugins to look like a real Chrome browser
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-          const plugins = [
-            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
-          ];
-          plugins.length = 3;
-          return plugins;
-        },
-        configurable: true,
-      });
-
-      // Fix languages to match locale config
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ${JSON.stringify(fpConfig?.locale ? [fpConfig.locale, fpConfig.locale.split('-')[0]] : ['en-US', 'en'])},
-        configurable: true,
-      });
+        // Fix permissions.query for notifications
+        if (navigator.permissions && navigator.permissions.query) {
+          const origQuery = navigator.permissions.query.bind(navigator.permissions);
+          navigator.permissions.query = function(desc) {
+            if (desc.name === 'notifications') {
+              return Promise.resolve({ state: Notification.permission });
+            }
+            return origQuery(desc);
+          };
+        }
+      }
     `);
 
     // Restore saved cookies from database
@@ -412,26 +490,63 @@ export class ProfileManager {
       // Ignore tab restore errors
     }
 
-    // Inject fingerprint spoofing scripts
+    // Inject fingerprint spoofing scripts via addInitScript with Proxy wrappers
+    // Proxy preserves native toString() behavior, making overrides harder to detect
     if (fpConfig) {
-      // Hardware spoofing: CPU cores and RAM
+      // Hardware + Platform spoofing
+      const spoofParts: string[] = [];
+
       if (fpConfig.cpu?.cores || fpConfig.ram?.sizeGB) {
         const cores = fpConfig.cpu?.cores || 4;
         const ram = fpConfig.ram?.sizeGB || 8;
-        await context.addInitScript(`
-          Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => ${cores} });
-          Object.defineProperty(navigator, 'deviceMemory', { get: () => ${ram} });
+        spoofParts.push(`
+          // Hardware Concurrency
+          (function() {
+            const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'hardwareConcurrency');
+            if (desc && desc.get) {
+              Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
+                get: new Proxy(desc.get, { apply: () => ${cores} }),
+                configurable: true, enumerable: true
+              });
+            }
+          })();
+          // Device Memory
+          (function() {
+            const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory');
+            if (desc && desc.get) {
+              Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+                get: new Proxy(desc.get, { apply: () => ${ram} }),
+                configurable: true, enumerable: true
+              });
+            } else {
+              Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+                get: () => ${ram},
+                configurable: true, enumerable: true
+              });
+            }
+          })();
         `);
       }
 
-      // Platform spoofing
       if (fpConfig.platform) {
-        await context.addInitScript(`
-          Object.defineProperty(navigator, 'platform', { get: () => ${JSON.stringify(fpConfig.platform)} });
+        spoofParts.push(`
+          (function() {
+            const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
+            if (desc && desc.get) {
+              Object.defineProperty(Navigator.prototype, 'platform', {
+                get: new Proxy(desc.get, { apply: () => ${JSON.stringify(fpConfig.platform)} }),
+                configurable: true, enumerable: true
+              });
+            }
+          })();
         `);
       }
 
-      // WebRTC spoofing
+      if (spoofParts.length > 0) {
+        await context.addInitScript(spoofParts.join('\n'));
+      }
+
+      // WebRTC spoofing — Chromium args handle most of it, JS is backup
       if (fpConfig.webrtc === 'disable') {
         await context.addInitScript(`
           if (typeof window !== 'undefined') {
@@ -503,20 +618,34 @@ export class ProfileManager {
         `);
       }
 
-      // Screen resolution spoofing
+      // Screen resolution spoofing — use Proxy on Screen.prototype for stealth
       if (fpConfig.screen) {
         const sw = fpConfig.screen.width || 1920;
         const sh = fpConfig.screen.height || 1080;
         const cd = fpConfig.screen.colorDepth || 24;
         await context.addInitScript(`
           (function() {
-            const W = ${sw}, H = ${sh}, CD = ${cd}, AH = ${sh} - 40;
-            Object.defineProperty(screen, 'width', { get: () => W, configurable: true });
-            Object.defineProperty(screen, 'height', { get: () => H, configurable: true });
-            Object.defineProperty(screen, 'availWidth', { get: () => W, configurable: true });
-            Object.defineProperty(screen, 'availHeight', { get: () => AH, configurable: true });
-            Object.defineProperty(screen, 'colorDepth', { get: () => CD, configurable: true });
-            Object.defineProperty(screen, 'pixelDepth', { get: () => CD, configurable: true });
+            const W = ${sw}, H = ${sh}, CD = ${cd}, AW = ${sw}, AH = ${sh} - 40;
+            const props = {
+              width: W, height: H,
+              availWidth: AW, availHeight: AH,
+              colorDepth: CD, pixelDepth: CD
+            };
+            for (const [prop, val] of Object.entries(props)) {
+              try {
+                const desc = Object.getOwnPropertyDescriptor(Screen.prototype, prop);
+                if (desc && desc.get) {
+                  Object.defineProperty(Screen.prototype, prop, {
+                    get: new Proxy(desc.get, { apply: () => val }),
+                    configurable: true, enumerable: true
+                  });
+                } else {
+                  Object.defineProperty(screen, prop, {
+                    get: () => val, configurable: true, enumerable: true
+                  });
+                }
+              } catch(e) {}
+            }
           })();
         `);
       }
