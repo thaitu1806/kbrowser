@@ -30,26 +30,50 @@ export interface ActionCategory {
 export interface RPAAction {
   id?: string;
   type: RPAActionType;
+  description?: string;
+  // Selector
   selector?: string;
+  selectorType?: 'css' | 'xpath' | 'text';
+  useStoredElement?: boolean;
+  storedElementVar?: string;
+  // Values
   value?: string;
+  useVariable?: boolean;
+  variableName?: string;
+  // Timeout
   timeout?: number;
-  /** For loops */
-  times?: number;
-  loopVariable?: string;
-  /** Nested actions (for loops, conditions) */
-  children?: RPAAction[];
-  /** For conditions */
-  condition?: string;
-  /** For key combinations */
-  keys?: string[];
-  /** For switchTab */
-  tabIndex?: number;
-  /** For dropdown */
-  optionValue?: string;
-  /** For scroll */
+  timeoutMode?: 'fixed' | 'random';
+  timeoutMin?: number;
+  timeoutMax?: number;
+  // Click options
+  buttonAct?: 'left' | 'right' | 'double';
+  clickAct?: 'click' | 'hold';
+  elementOrder?: 'first' | 'last' | 'random' | 'fixed';
+  elementOrderMin?: number;
+  elementOrderMax?: number;
+  // Scroll options
+  scrollTarget?: 'page' | 'selector';
+  scrollPosition?: 'top' | 'bottom' | 'custom';
+  scrollType?: 'smooth' | 'instant';
+  scrollSpeedMin?: number;
+  scrollSpeedMax?: number;
+  scrollDurationMin?: number;
+  scrollDurationMax?: number;
   direction?: 'up' | 'down';
   distance?: number;
-  /** After task completes */
+  // Loop
+  times?: number;
+  loopVariable?: string;
+  children?: RPAAction[];
+  // Condition
+  condition?: string;
+  // Keys
+  keys?: string[];
+  // Tab
+  tabIndex?: number;
+  // Dropdown
+  optionValue?: string;
+  // After task
   afterAction?: 'clearTab' | 'quitBrowser' | 'none';
 }
 

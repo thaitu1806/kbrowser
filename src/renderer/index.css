@@ -2225,3 +2225,146 @@ tr:hover { background: #f8faff; }
 .ext-icon-upload:hover {
   border-color: var(--primary);
 }
+
+
+/* ============================================================
+   RPA Action Modal
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content.rpa-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 { margin: 0; font-size: 16px; font-weight: 600; }
+
+.modal-close {
+  background: none; border: none; font-size: 18px;
+  cursor: pointer; color: var(--text-muted); padding: 4px 8px;
+  border-radius: 4px;
+}
+.modal-close:hover { background: var(--bg-light); }
+
+.modal-body { padding: 20px; }
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+}
+
+.rpa-modal-field {
+  margin-bottom: 16px;
+}
+
+.rpa-modal-field > label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.rpa-modal-field input,
+.rpa-modal-field select,
+.rpa-modal-field textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rpa-modal-field input:focus,
+.rpa-modal-field select:focus,
+.rpa-modal-field textarea:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.rpa-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rpa-field-row input,
+.rpa-field-row select {
+  width: auto;
+}
+
+.rpa-var-link {
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rpa-char-count {
+  display: block;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.rpa-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.rpa-tabs button {
+  padding: 6px 16px;
+  border: none;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.rpa-tabs button.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.rpa-radio-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.rpa-radio-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}

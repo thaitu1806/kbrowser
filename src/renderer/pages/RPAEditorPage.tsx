@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { RPAAction, RPAActionType, RPAScript } from '@shared/types';
+import RPAActionModal from '../components/RPAActionModal';
 
 /** All action categories for the operations panel */
 const ACTION_CATEGORIES = [
@@ -122,6 +123,7 @@ export default function RPAEditorPage() {
   );
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [searchOp, setSearchOp] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   const addAction = (type: RPAActionType) => {
     setScript((prev) => ({ ...prev, actions: [...prev.actions, createAction(type)] }));
@@ -296,6 +298,7 @@ export default function RPAEditorPage() {
                     </div>
                   </div>
                   <div className="rpa-step-actions">
+                    <button title="Edit" onClick={() => setEditingIndex(index)}>✏️</button>
                     <button title="Duplicate" onClick={() => duplicateAction(index)}>📋</button>
                     <button title="Delete" onClick={() => removeAction(index)}>🗑️</button>
                   </div>
@@ -312,6 +315,18 @@ export default function RPAEditorPage() {
           </button>
         </div>
       </div>
+
+      {/* Action Config Modal */}
+      {editingIndex !== null && script.actions[editingIndex] && (
+        <RPAActionModal
+          action={script.actions[editingIndex]}
+          onSave={(updated) => {
+            updateAction(editingIndex, updated);
+            setEditingIndex(null);
+          }}
+          onCancel={() => setEditingIndex(null)}
+        />
+      )}
     </div>
   );
 }
