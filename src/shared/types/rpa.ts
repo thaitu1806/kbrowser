@@ -71,8 +71,20 @@ export interface RPAAction {
   keys?: string[];
   // Tab
   tabIndex?: number;
-  // Dropdown
-  optionValue?: string;
+  // Screenshot options
+  screenshotName?: string;
+  screenshotFolder?: 'default' | 'local';
+  screenshotLocalPath?: string;
+  screenshotFullPage?: boolean;
+  screenshotFormat?: 'png' | 'jpeg';
+  // Input options
+  inputMode?: 'inOrder' | 'atRandom' | 'randomNumber';
+  clearBeforeInput?: boolean;
+  // Execute JS
+  injectVariables?: string;
+  returnValueSaveTo?: string;
+  // Key combination
+  recordedKeys?: string;
   // After task
   afterAction?: 'clearTab' | 'quitBrowser' | 'none';
 }
