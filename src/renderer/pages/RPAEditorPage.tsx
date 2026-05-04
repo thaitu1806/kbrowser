@@ -117,8 +117,13 @@ const emptyScript: RPAScript = {
   afterTaskAction: 'none',
 };
 
-export default function RPAEditorPage() {
-  const [script, setScript] = useState<RPAScript>(emptyScript);
+interface RPAEditorProps {
+  initialScript?: RPAScript | null;
+  onBack?: () => void;
+}
+
+export default function RPAEditorPage({ initialScript, onBack }: RPAEditorProps) {
+  const [script, setScript] = useState<RPAScript>(initialScript || emptyScript);
   const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>(
     Object.fromEntries(ACTION_CATEGORIES.map((c) => [c.name, true]))
   );
@@ -203,10 +208,24 @@ export default function RPAEditorPage() {
     return JSON.stringify(exportToAdsPower(script.actions), null, 2);
   };
 
-  const handleSave = () => {
-    if (!script.name.trim()) return;
-    window.electronAPI?.saveRPAScript?.(script);
-    alert(`Đã lưu "${script.name}" với ${script.actions.length} hành động`);
+  const handleSave = async () => {
+    if (!script.name.trim()) {
+      alert('Please enter a process name');
+      return;
+    }
+    try {
+      const api = window.electronAPI;
+      if (api?.saveRPAScript) {
+        const id = await api.saveRPAScript(script);
+        setScript((prev) => ({ ...prev, id }));
+        if (onBack) onBack();
+        else alert(`Saved "${script.name}" successfully`);
+      } else {
+        alert('Save not available in dev mode');
+      }
+    } catch (err) {
+      alert(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   };
 
   const handleExecute = () => {

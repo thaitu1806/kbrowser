@@ -129,46 +129,93 @@ export function setupIPC(): { profileManager: ProfileManager } {
         if (event.sender && !event.sender.isDestroyed()) {
           event.sender.send('profile:open:status', {
             profileId, status: 'downloading',
-            message: `Downloading ${missing.join(' + ')} (~200MB, first time only)...`
+            message: `Downloading ${missing.join(' + ')} (first time only)...`
           });
         }
 
-        // Method: Use child_process.exec with npx (most reliable cross-platform)
-        const { exec } = require('child_process');
-        for (const browser of missing) {
-          try {
-            await new Promise<void>((resolve, reject) => {
-              const child = exec(
-                `npx playwright install ${browser}`,
-                { timeout: 600000, cwd: os.homedir() },
-                (error: Error | null, stdout: string, stderr: string) => {
-                  if (error) {
-                    installErrors.push(`npx install ${browser}: ${stderr || error.message}`);
-                    reject(error);
-                  } else {
-                    console.log(`Installed ${browser}:`, stdout);
-                    resolve();
+        // Use Playwright's built-in browser download from within the Electron process
+        // playwright-core is bundled in the app, so we can call its internal APIs directly
+        try {
+          // Import playwright's internal registry
+          const playwrightCore = require('playwright-core');
+          // Force browser download by trying to get executable path
+          // This triggers Playwright's internal download mechanism
+          for (const browserName of missing) {
+            try {
+              if (event.sender && !event.sender.isDestroyed()) {
+                event.sender.send('profile:open:status', {
+                  profileId, status: 'downloading',
+                  message: `Installing ${browserName}...`
+                });
+              }
+              
+              // Use the internal _api to install browsers
+              const { execSync } = require('child_process');
+              
+              // Try to find npx in common locations
+              const npxPaths = [
+                'npx',
+                path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs', 'npx.cmd'),
+                path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'nodejs', 'npx.cmd'),
+                path.join(process.env.APPDATA || '', 'npm', 'npx.cmd'),
+                path.join(os.homedir(), 'AppData', 'Roaming', 'npm', 'npx.cmd'),
+                // nvm paths
+                path.join(process.env.NVM_HOME || '', 'npx.cmd'),
+                path.join(os.homedir(), '.nvm', 'npx.cmd'),
+              ];
+              
+              let installed = false;
+              for (const npxPath of npxPaths) {
+                try {
+                  execSync(`"${npxPath}" playwright install ${browserName}`, {
+                    stdio: 'pipe',
+                    timeout: 600000,
+                    cwd: os.homedir(),
+                    env: { ...process.env, PATH: `${process.env.PATH};${path.join(process.env.PROGRAMFILES || '', 'nodejs')};${path.join(os.homedir(), 'AppData', 'Roaming', 'npm')}` },
+                  });
+                  installed = true;
+                  break;
+                } catch {
+                  continue;
+                }
+              }
+              
+              if (!installed) {
+                // Last resort: try node directly
+                const nodePaths = [
+                  'node',
+                  path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs', 'node.exe'),
+                  path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'nodejs', 'node.exe'),
+                ];
+                
+                for (const nodePath of nodePaths) {
+                  try {
+                    execSync(`"${nodePath}" -e "const{execSync}=require('child_process');execSync('npx playwright install ${browserName}',{stdio:'inherit'})"`, {
+                      stdio: 'pipe',
+                      timeout: 600000,
+                      cwd: os.homedir(),
+                    });
+                    installed = true;
+                    break;
+                  } catch {
+                    continue;
                   }
                 }
-              );
-              // Forward progress to renderer
-              child.stdout?.on('data', (data: string) => {
-                if (event.sender && !event.sender.isDestroyed()) {
-                  event.sender.send('profile:open:status', {
-                    profileId, status: 'downloading',
-                    message: `Installing ${browser}: ${data.toString().trim().slice(-80)}`
-                  });
-                }
-              });
-            });
-          } catch {
-            // Continue to try next browser
+              }
+              
+              if (!installed) {
+                installErrors.push(`Could not find npx or node to install ${browserName}. Please install Node.js from https://nodejs.org`);
+              }
+            } catch (browserErr: unknown) {
+              installErrors.push(`${browserName}: ${browserErr instanceof Error ? browserErr.message : 'Unknown error'}`);
+            }
           }
+        } catch (e: unknown) {
+          installErrors.push(`Install failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
       }
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'Unknown error';
-      installErrors.push(`Check failed: ${errMsg}`);
+      installErrors.push(`Check failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
 
     try {
@@ -182,7 +229,7 @@ export function setupIPC(): { profileManager: ProfileManager } {
     } catch (openErr: unknown) {
       const openMsg = openErr instanceof Error ? openErr.message : 'Unknown error';
       if (installErrors.length > 0) {
-        throw new Error(`${openMsg}\n\n--- Browser Install Logs ---\n${installErrors.join('\n')}`);
+        throw new Error(`${openMsg}\n\n--- Browser Install Logs ---\n${installErrors.join('\n')}\n\nPlease install Node.js from https://nodejs.org and restart the app.`);
       }
       throw openErr;
     }
@@ -583,6 +630,23 @@ export function setupIPC(): { profileManager: ProfileManager } {
 
   ipcMain.handle('rpa:loadTemplate', async (_event, templateId: string) => {
     return rpaEngine.loadTemplate(templateId);
+  });
+
+  ipcMain.handle('rpa:list', async () => {
+    const rows = db.prepare('SELECT id, name, actions, error_handling, max_retries, created_at, updated_at FROM rpa_scripts WHERE is_template = 0 ORDER BY updated_at DESC').all();
+    return rows.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      actions: JSON.parse(row.actions),
+      errorHandling: row.error_handling,
+      maxRetries: row.max_retries,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }));
+  });
+
+  ipcMain.handle('rpa:delete', async (_event, scriptId: string) => {
+    db.prepare('DELETE FROM rpa_scripts WHERE id = ? AND is_template = 0').run(scriptId);
   });
 
   // ─── RBAC handlers ───

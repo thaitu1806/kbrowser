@@ -2582,3 +2582,69 @@ tr:hover { background: #f8faff; }
   color: var(--primary);
   text-decoration: underline;
 }
+
+
+/* RPA Processes Page */
+.rpa-processes-page { padding: 20px; }
+
+.rpa-proc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.rpa-proc-header h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.rpa-proc-count { font-size: 13px; color: var(--text-muted); }
+
+.rpa-proc-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.rpa-proc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.rpa-proc-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-white);
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+
+.rpa-proc-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+
+.rpa-proc-card-body {
+  padding: 16px;
+  cursor: pointer;
+  min-height: 80px;
+}
+
+.rpa-proc-card-icon { font-size: 24px; margin-bottom: 8px; }
+.rpa-proc-card-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpa-proc-card-remark { font-size: 12px; color: var(--text-muted); }
+
+.rpa-proc-card-actions {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.rpa-proc-card-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
+.rpa-proc-card-actions button:hover { opacity: 1; background: var(--bg-light); }

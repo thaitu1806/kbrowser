@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   executeRPA: (profileId: string, script: unknown) => ipcRenderer.invoke('rpa:execute', profileId, script),
   saveRPAScript: (script: unknown) => ipcRenderer.invoke('rpa:save', script),
   loadRPAScript: (id: string) => ipcRenderer.invoke('rpa:load', id),
+  listRPAScripts: () => ipcRenderer.invoke('rpa:list'),
+  deleteRPAScript: (id: string) => ipcRenderer.invoke('rpa:delete', id),
   listRPATemplates: (platform?: string) => ipcRenderer.invoke('rpa:templates', platform),
   loadRPATemplate: (id: string) => ipcRenderer.invoke('rpa:loadTemplate', id),
 

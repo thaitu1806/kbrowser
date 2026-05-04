@@ -70,6 +70,8 @@ interface ElectronAPI {
   executeRPA(profileId: string, script: RPAScript): Promise<RPAExecutionResult>;
   saveRPAScript(script: RPAScript): Promise<string>;
   loadRPAScript(id: string): Promise<RPAScript>;
+  listRPAScripts(): Promise<RPAScript[]>;
+  deleteRPAScript(id: string): Promise<void>;
   listRPATemplates(platform?: string): Promise<RPATemplate[]>;
   loadRPATemplate(id: string): Promise<RPAScript>;
 

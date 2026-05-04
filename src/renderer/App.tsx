@@ -5,6 +5,7 @@ import NewProfileForm from './pages/NewProfileForm';
 import FingerprintConfigForm from './pages/FingerprintConfigForm';
 import ProxiesPage from './pages/ProxiesPage';
 import RPAEditorPage from './pages/RPAEditorPage';
+import RPAProcessesPage from './pages/RPAProcessesPage';
 import RBACPage from './pages/RBACPage';
 import ActionLogsPage from './pages/ActionLogsPage';
 import ExtensionsPage from './pages/ExtensionsPage';
@@ -55,6 +56,7 @@ function App() {
   const [editProfileId, setEditProfileId] = useState<string | null>(null);
   const [initialGroupFilter, setInitialGroupFilter] = useState<string | null>(null);
   const [profileCount, setProfileCount] = useState(0);
+  const [editRPAScript, setEditRPAScript] = useState<import('@shared/types').RPAScript | null>(null);
 
   // Load profile count
   useEffect(() => {
@@ -98,8 +100,15 @@ function App() {
       case 'trash':
         return <TrashPage />;
       case 'rpa':
+        return <RPAProcessesPage
+          onCreateProcess={() => { setEditRPAScript(null); setActivePage('rpa-plus'); }}
+          onEditProcess={(script) => { setEditRPAScript(script); setActivePage('rpa-plus'); }}
+        />;
       case 'rpa-plus':
-        return <RPAEditorPage />;
+        return <RPAEditorPage
+          initialScript={editRPAScript}
+          onBack={() => { setEditRPAScript(null); setActivePage('rpa'); }}
+        />;
       case 'rbac':
         return <RBACPage />;
       case 'logs':
