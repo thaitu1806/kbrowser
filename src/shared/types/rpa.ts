@@ -85,6 +85,16 @@ export interface RPAAction {
   returnValueSaveTo?: string;
   // Key combination
   recordedKeys?: string;
+  // Get Data options
+  extractionType?: 'fullUrl' | 'domain' | 'path' | 'query';
+  saveTo?: string;
+  visible?: boolean;
+  // Save to Txt / Excel
+  fileName?: string;
+  savePath?: string;
+  selectColumn?: string;
+  // Wait Request
+  responseUrl?: string;
   // After task
   afterAction?: 'clearTab' | 'quitBrowser' | 'none';
 }

@@ -341,34 +341,62 @@ function renderFields(data: RPAAction, set: (u: Partial<RPAAction>) => void) {
         </div>
       );
 
-    // ─── Wait Element ───
+    // ─── Wait Element (Element Appears) ───
     case 'waitElement':
       return (
         <>
           <div className="rpa-modal-field">
             <label>Selector</label>
-            <input value={data.selector || ''} onChange={(e) => set({ selector: e.target.value })} placeholder="CSS selector..." />
+            <div className="rpa-radio-row">
+              <label><input type="radio" checked={data.selectorType !== 'xpath' && data.selectorType !== 'text'} onChange={() => set({ selectorType: 'css' })} /> Selector</label>
+              <label><input type="radio" checked={data.selectorType === 'xpath'} onChange={() => set({ selectorType: 'xpath' })} /> XPath</label>
+              <label><input type="radio" checked={data.selectorType === 'text'} onChange={() => set({ selectorType: 'text' })} /> Text</label>
+            </div>
+            <div className="rpa-field-row">
+              <input value={data.selector || ''} onChange={(e) => set({ selector: e.target.value })} placeholder="Please enter the element, such as #email input" style={{ flex: 1 }} />
+              <span className="rpa-var-link">Use Variable*</span>
+            </div>
+          </div>
+          <ElementOrderField data={data} set={set} />
+          <div className="rpa-modal-field">
+            <label>Visible</label>
+            <label className="rpa-toggle">
+              <input type="checkbox" checked={data.visible !== false} onChange={(e) => set({ visible: e.target.checked })} />
+              <span className="rpa-toggle-slider"></span>
+            </label>
           </div>
           <div className="rpa-modal-field">
-            <label>Timeout</label>
+            <label>Timeout waiting</label>
             <div className="rpa-field-row">
-              <input type="number" value={data.timeout || 10000} onChange={(e) => set({ timeout: parseInt(e.target.value) || 10000 })} style={{ width: 120 }} />
+              <input type="number" value={data.timeout || 30000} onChange={(e) => set({ timeout: parseInt(e.target.value) || 30000 })} style={{ width: 120 }} />
               <span className="rpa-unit">Millisecond</span>
+              <span className="rpa-hint">1 second = 1000 milliseconds</span>
             </div>
+          </div>
+          <div className="rpa-modal-field">
+            <label>Save to</label>
+            <input value={data.saveTo || ''} onChange={(e) => set({ saveTo: e.target.value })} placeholder="Please fill in the variable to save the result" />
           </div>
         </>
       );
 
-    // ─── Wait Request ───
+    // ─── Wait Request (Request to Finish) ───
     case 'waitRequest':
       return (
-        <div className="rpa-modal-field">
-          <label>Timeout</label>
-          <div className="rpa-field-row">
-            <input type="number" value={data.timeout || 30000} onChange={(e) => set({ timeout: parseInt(e.target.value) || 30000 })} style={{ width: 120 }} />
-            <span className="rpa-unit">Millisecond</span>
+        <>
+          <div className="rpa-modal-field">
+            <label>Response URL</label>
+            <input value={data.responseUrl || ''} onChange={(e) => set({ responseUrl: e.target.value })} placeholder="Please fill in the content consisted in the request URL" />
           </div>
-        </div>
+          <div className="rpa-modal-field">
+            <label>Timeout waiting</label>
+            <div className="rpa-field-row">
+              <input type="number" value={data.timeout || 30000} onChange={(e) => set({ timeout: parseInt(e.target.value) || 30000 })} style={{ width: 120 }} />
+              <span className="rpa-unit">Millisecond</span>
+              <span className="rpa-hint">1 second = 1000 milliseconds</span>
+            </div>
+          </div>
+        </>
       );
 
     // ─── For Loop ───
@@ -486,8 +514,21 @@ function renderFields(data: RPAAction, set: (u: Partial<RPAAction>) => void) {
     case 'getElement':
       return (
         <>
+          <div className="rpa-info-box">ℹ️ To obtain web page elements and save them as variables. <a href="#">Learn more</a></div>
           <SelectorField data={data} set={set} />
           <ElementOrderField data={data} set={set} />
+          <div className="rpa-modal-field">
+            <label>Extraction type</label>
+            <select value={data.extractionType || 'fullUrl'} onChange={(e) => set({ extractionType: e.target.value as RPAAction['extractionType'] })} style={{ width: 140 }}>
+              <option value="fullUrl">Text</option>
+              <option value="domain">HTML</option>
+              <option value="path">Attribute</option>
+            </select>
+          </div>
+          <div className="rpa-modal-field">
+            <label>Save to</label>
+            <input value={data.saveTo || ''} onChange={(e) => set({ saveTo: e.target.value })} placeholder="Saved variable name" />
+          </div>
         </>
       );
 
@@ -498,6 +539,68 @@ function renderFields(data: RPAAction, set: (u: Partial<RPAAction>) => void) {
           <label>Condition (JavaScript expression)</label>
           <input value={data.condition || ''} onChange={(e) => set({ condition: e.target.value })} placeholder="document.querySelector('.element') !== null" />
         </div>
+      );
+
+    // ─── Get URL ───
+    case 'getURL':
+      return (
+        <>
+          <div className="rpa-modal-field">
+            <label>Extraction type</label>
+            <select value={data.extractionType || 'fullUrl'} onChange={(e) => set({ extractionType: e.target.value as RPAAction['extractionType'] })} style={{ width: 140 }}>
+              <option value="fullUrl">Full Url</option>
+              <option value="domain">Domain</option>
+              <option value="path">Path</option>
+              <option value="query">Query</option>
+            </select>
+          </div>
+          <div className="rpa-modal-field">
+            <label>Save to</label>
+            <input value={data.saveTo || ''} onChange={(e) => set({ saveTo: e.target.value })} placeholder="Saved variable name" />
+          </div>
+        </>
+      );
+
+    // ─── Get Clipboard ───
+    case 'getClipboard':
+      return (
+        <div className="rpa-modal-field">
+          <label>Save to</label>
+          <input value={data.saveTo || ''} onChange={(e) => set({ saveTo: e.target.value })} placeholder="Saved variable name" />
+        </div>
+      );
+
+    // ─── Get Focused Element ───
+    case 'getFocusedElement':
+      return (
+        <>
+          <div className="rpa-info-box">Get the currently focused element on the page</div>
+          <div className="rpa-modal-field">
+            <label>Save to</label>
+            <input value={data.saveTo || ''} onChange={(e) => set({ saveTo: e.target.value })} placeholder="Saved variable name" />
+          </div>
+        </>
+      );
+
+    // ─── Save to Txt ───
+    case 'saveTxt':
+      return (
+        <>
+          <div className="rpa-modal-field">
+            <label>File Name</label>
+            <div className="rpa-field-row">
+              <input value={data.fileName || ''} onChange={(e) => set({ fileName: e.target.value })} placeholder="Please enter the file name" style={{ flex: 1 }} />
+              <span className="rpa-unit">-${'{'} Task ID {'}'}.txt</span>
+              <span className="rpa-var-link">Use Variable*</span>
+            </div>
+          </div>
+          <div className="rpa-modal-field">
+            <label>Select Column</label>
+            <select value={data.selectColumn || ''} onChange={(e) => set({ selectColumn: e.target.value })}>
+              <option value="">Please select variable</option>
+            </select>
+          </div>
+        </>
       );
 
     // ─── Simple actions (no extra config) ───
