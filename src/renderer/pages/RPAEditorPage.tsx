@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RPAAction, RPAActionType, RPAScript } from '@shared/types';
 import RPAActionModal from '../components/RPAActionModal';
+import { importFromAdsPower, exportToAdsPower } from '../utils/rpa-converter';
 
 /** All action categories for the operations panel */
 const ACTION_CATEGORIES = [
@@ -163,6 +164,50 @@ export default function RPAEditorPage() {
     setExpandedCats((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const adsActions = JSON.parse(text);
+        if (!Array.isArray(adsActions)) {
+          alert('Invalid format: expected JSON array');
+          return;
+        }
+        const converted = importFromAdsPower(adsActions);
+        setScript((prev) => ({
+          ...prev,
+          name: prev.name || file.name.replace('.json', ''),
+          actions: [...prev.actions, ...converted],
+        }));
+        alert(`Imported ${converted.length} actions`);
+      } catch (err) {
+        alert(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    };
+    input.click();
+  };
+
+  const handleExport = () => {
+    if (script.actions.length === 0) {
+      alert('No actions to export');
+      return;
+    }
+    const adsFormat = exportToAdsPower(script.actions);
+    const json = JSON.stringify(adsFormat, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${script.name || 'rpa-process'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleSave = () => {
     if (!script.name.trim()) return;
     window.electronAPI?.saveRPAScript?.(script);
@@ -223,8 +268,8 @@ export default function RPAEditorPage() {
         <div className="rpa-header">
           <div className="rpa-header-actions">
             <button className="btn btn-sm" onClick={() => alert('Debug')}>⚙ Debug</button>
-            <button className="btn btn-sm" onClick={() => alert('Import')}>📥 Import</button>
-            <button className="btn btn-sm" onClick={() => alert('Export')}>📤 Export</button>
+            <button className="btn btn-sm" onClick={handleImport}>📥 Import</button>
+            <button className="btn btn-sm" onClick={handleExport}>📤 Export</button>
             <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save</button>
           </div>
         </div>
