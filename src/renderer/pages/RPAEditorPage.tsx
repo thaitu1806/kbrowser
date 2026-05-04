@@ -321,28 +321,61 @@ export default function RPAEditorPage() {
               </div>
             ) : (
               script.actions.map((action, index) => (
-                <div
+                <RPAStepItem
                   key={action.id || index}
-                  className={`rpa-step ${dragIndex === index ? 'dragging' : ''}`}
-                  draggable
-                  onDragStart={() => setDragIndex(index)}
-                  onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== index) { moveAction(dragIndex, index); setDragIndex(index); } }}
-                  onDragEnd={() => setDragIndex(null)}
-                >
-                  <div className="rpa-step-handle">⠿</div>
-                  <div className="rpa-step-icon">{ACTION_ICONS[action.type] || '▶'}</div>
-                  <div className="rpa-step-content">
-                    <div className="rpa-step-title">{ACTION_LABELS[action.type] || action.type}</div>
-                    <div className="rpa-step-config">
-                      {renderActionConfig(action, index, updateAction)}
-                    </div>
-                  </div>
-                  <div className="rpa-step-actions">
-                    <button title="Edit" onClick={() => setEditingIndex(index)}>✏️</button>
-                    <button title="Duplicate" onClick={() => duplicateAction(index)}>📋</button>
-                    <button title="Delete" onClick={() => removeAction(index)}>🗑️</button>
-                  </div>
-                </div>
+                  action={action}
+                  index={index}
+                  dragIndex={dragIndex}
+                  setDragIndex={setDragIndex}
+                  moveAction={moveAction}
+                  updateAction={updateAction}
+                  removeAction={removeAction}
+                  duplicateAction={duplicateAction}
+                  setEditingIndex={setEditingIndex}
+                  onAddChild={(parentIndex, type) => {
+                    setScript((prev) => {
+                      const actions = [...prev.actions];
+                      const parent = { ...actions[parentIndex] };
+                      parent.children = [...(parent.children || []), createAction(type)];
+                      actions[parentIndex] = parent;
+                      return { ...prev, actions };
+                    });
+                  }}
+                  onUpdateChild={(parentIndex, childIndex, updates) => {
+                    setScript((prev) => {
+                      const actions = [...prev.actions];
+                      const parent = { ...actions[parentIndex] };
+                      parent.children = (parent.children || []).map((c, ci) => ci === childIndex ? { ...c, ...updates } : c);
+                      actions[parentIndex] = parent;
+                      return { ...prev, actions };
+                    });
+                  }}
+                  onRemoveChild={(parentIndex, childIndex) => {
+                    setScript((prev) => {
+                      const actions = [...prev.actions];
+                      const parent = { ...actions[parentIndex] };
+                      parent.children = (parent.children || []).filter((_, ci) => ci !== childIndex);
+                      actions[parentIndex] = parent;
+                      return { ...prev, actions };
+                    });
+                  }}
+                  onDuplicateChild={(parentIndex, childIndex) => {
+                    setScript((prev) => {
+                      const actions = [...prev.actions];
+                      const parent = { ...actions[parentIndex] };
+                      const children = [...(parent.children || [])];
+                      const copy = { ...children[childIndex], id: `act-${Date.now()}` };
+                      children.splice(childIndex + 1, 0, copy);
+                      parent.children = children;
+                      actions[parentIndex] = parent;
+                      return { ...prev, actions };
+                    });
+                  }}
+                  onEditChild={(parentIndex, childIndex) => {
+                    // Store parent+child index for modal editing
+                    setEditingIndex(parentIndex * 1000 + childIndex + 1);
+                  }}
+                />
               ))
             )}
           </div>
@@ -357,7 +390,7 @@ export default function RPAEditorPage() {
       </div>
 
       {/* Action Config Modal */}
-      {editingIndex !== null && script.actions[editingIndex] && (
+      {editingIndex !== null && editingIndex < 1000 && script.actions[editingIndex] && (
         <RPAActionModal
           action={script.actions[editingIndex]}
           onSave={(updated) => {
@@ -367,6 +400,30 @@ export default function RPAEditorPage() {
           onCancel={() => setEditingIndex(null)}
         />
       )}
+      {/* Child Action Modal */}
+      {editingIndex !== null && editingIndex >= 1000 && (() => {
+        const parentIdx = Math.floor(editingIndex / 1000);
+        const childIdx = (editingIndex % 1000) - 1;
+        const parent = script.actions[parentIdx];
+        const child = parent?.children?.[childIdx];
+        if (!child) return null;
+        return (
+          <RPAActionModal
+            action={child}
+            onSave={(updated) => {
+              setScript((prev) => {
+                const actions = [...prev.actions];
+                const p = { ...actions[parentIdx] };
+                p.children = (p.children || []).map((c, ci) => ci === childIdx ? { ...c, ...updated } : c);
+                actions[parentIdx] = p;
+                return { ...prev, actions };
+              });
+              setEditingIndex(null);
+            }}
+            onCancel={() => setEditingIndex(null)}
+          />
+        );
+      })()}
 
       {/* Import Modal */}
       {showImportModal && (
@@ -437,6 +494,86 @@ export default function RPAEditorPage() {
   );
 }
 
+
+/** Step item component — supports nested children for ForLoop */
+function RPAStepItem({ action, index, dragIndex, setDragIndex, moveAction, updateAction, removeAction, duplicateAction, setEditingIndex, onAddChild, onUpdateChild, onRemoveChild, onDuplicateChild, onEditChild }: {
+  action: RPAAction; index: number; dragIndex: number | null;
+  setDragIndex: (i: number | null) => void; moveAction: (f: number, t: number) => void;
+  updateAction: (i: number, u: Partial<RPAAction>) => void; removeAction: (i: number) => void;
+  duplicateAction: (i: number) => void; setEditingIndex: (i: number) => void;
+  onAddChild: (parentIndex: number, type: RPAActionType) => void;
+  onUpdateChild: (parentIndex: number, childIndex: number, updates: Partial<RPAAction>) => void;
+  onRemoveChild: (parentIndex: number, childIndex: number) => void;
+  onDuplicateChild: (parentIndex: number, childIndex: number) => void;
+  onEditChild: (parentIndex: number, childIndex: number) => void;
+}) {
+  const hasChildren = action.type === 'forLoop' || action.type === 'ifCondition';
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className={`rpa-step-wrapper ${hasChildren ? 'has-children' : ''}`}>
+      <div
+        className={`rpa-step ${dragIndex === index ? 'dragging' : ''} ${hasChildren ? 'rpa-step-parent' : ''}`}
+        draggable
+        onDragStart={() => setDragIndex(index)}
+        onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== index) { moveAction(dragIndex, index); setDragIndex(index); } }}
+        onDragEnd={() => setDragIndex(null)}
+      >
+        {hasChildren && (
+          <button className="rpa-collapse-btn" onClick={() => setCollapsed(!collapsed)}>
+            {collapsed ? '▸' : '▾'}
+          </button>
+        )}
+        <div className="rpa-step-handle">⠿</div>
+        <div className="rpa-step-icon">{ACTION_ICONS[action.type] || '▶'}</div>
+        <div className="rpa-step-content">
+          <div className="rpa-step-title">{ACTION_LABELS[action.type] || action.type}</div>
+          <div className="rpa-step-config">
+            {hasChildren ? (
+              <span className="rpa-step-summary">
+                {action.type === 'forLoop' && <>Times: <b>{action.times || 5}</b> , Save loop element index to: <b>{action.loopVariable || 'for_times_index'}</b></>}
+                {action.type === 'ifCondition' && <>Condition: <b>{action.condition || '...'}</b></>}
+              </span>
+            ) : (
+              renderActionConfig(action, index, updateAction)
+            )}
+          </div>
+        </div>
+        <div className="rpa-step-actions">
+          <button title="Edit" onClick={() => setEditingIndex(index)}>✏️</button>
+          <button title="Duplicate" onClick={() => duplicateAction(index)}>📋</button>
+          <button title="Delete" onClick={() => removeAction(index)}>🗑️</button>
+        </div>
+      </div>
+
+      {/* Children */}
+      {hasChildren && !collapsed && (
+        <div className="rpa-children">
+          <div className="rpa-children-hint">
+            Process drag performed this region [{ACTION_LABELS[action.type]}] subtask
+          </div>
+          {(action.children || []).map((child, childIdx) => (
+            <div key={child.id || childIdx} className="rpa-step rpa-step-child">
+              <div className="rpa-step-handle">⠿</div>
+              <div className="rpa-step-icon">{ACTION_ICONS[child.type] || '▶'}</div>
+              <div className="rpa-step-content">
+                <div className="rpa-step-title">{ACTION_LABELS[child.type] || child.type}</div>
+                <div className="rpa-step-config">
+                  {renderActionConfig(child, childIdx, (ci, u) => onUpdateChild(index, ci, u))}
+                </div>
+              </div>
+              <div className="rpa-step-actions">
+                <button title="Edit" onClick={() => onEditChild(index, childIdx)}>✏️</button>
+                <button title="Duplicate" onClick={() => onDuplicateChild(index, childIdx)}>📋</button>
+                <button title="Delete" onClick={() => onRemoveChild(index, childIdx)}>🗑️</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Check if string is valid JSON */
 function isValidJson(str: string): boolean {
