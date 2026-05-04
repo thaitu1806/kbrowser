@@ -32,10 +32,14 @@ export type {
 export type {
   RPAScript,
   RPAAction,
+  RPAActionType,
   RPAExecutionResult,
   RPAError,
   RPATemplate,
+  ActionCategory,
 } from './rpa';
+
+export { ACTION_CATEGORIES } from './rpa';
 
 // RBAC System types
 export type {

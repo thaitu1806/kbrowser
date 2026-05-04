@@ -1,38 +1,130 @@
 import { useState } from 'react';
-import type { RPAAction, RPAScript } from '@shared/types';
+import type { RPAAction, RPAActionType, RPAScript } from '@shared/types';
 
-const ACTION_TYPES: RPAAction['type'][] = ['navigate', 'click', 'type', 'wait', 'scroll', 'screenshot'];
+/** All action categories for the operations panel */
+const ACTION_CATEGORIES = [
+  {
+    name: 'Web Actions',
+    icon: '🌐',
+    actions: [
+      { type: 'newTab' as RPAActionType, label: 'New Tab' },
+      { type: 'closeTab' as RPAActionType, label: 'Close Tab' },
+      { type: 'closeOtherTabs' as RPAActionType, label: 'Close Other Tabs' },
+      { type: 'switchTab' as RPAActionType, label: 'Switch Tabs' },
+      { type: 'accessWebsite' as RPAActionType, label: 'Access Website' },
+      { type: 'refreshWebpage' as RPAActionType, label: 'Refresh Webpage' },
+      { type: 'goBack' as RPAActionType, label: 'Go Back' },
+      { type: 'screenshot' as RPAActionType, label: 'Screenshot' },
+      { type: 'hover' as RPAActionType, label: 'Hover' },
+    ],
+  },
+  {
+    name: 'Element Actions',
+    icon: '🖱️',
+    actions: [
+      { type: 'dropdown' as RPAActionType, label: 'Drop-down' },
+      { type: 'focus' as RPAActionType, label: 'Focus' },
+      { type: 'click' as RPAActionType, label: 'Click' },
+      { type: 'input' as RPAActionType, label: 'Input' },
+      { type: 'scroll' as RPAActionType, label: 'Scroll' },
+      { type: 'inputFile' as RPAActionType, label: 'Input File' },
+      { type: 'executeJS' as RPAActionType, label: 'Execute JavaScript' },
+    ],
+  },
+  {
+    name: 'Keyboard Actions',
+    icon: '⌨️',
+    actions: [
+      { type: 'keys' as RPAActionType, label: 'Keys' },
+      { type: 'keyCombination' as RPAActionType, label: 'Key Combination' },
+    ],
+  },
+  {
+    name: 'Waits',
+    icon: '⏳',
+    actions: [
+      { type: 'waitTime' as RPAActionType, label: 'Time' },
+      { type: 'waitElement' as RPAActionType, label: 'Element Appears' },
+      { type: 'waitRequest' as RPAActionType, label: 'Request to Finish' },
+    ],
+  },
+  {
+    name: 'Get Data',
+    icon: '📋',
+    actions: [
+      { type: 'getURL' as RPAActionType, label: 'URL' },
+      { type: 'getClipboard' as RPAActionType, label: 'Clipboard Content' },
+      { type: 'getElement' as RPAActionType, label: 'Element' },
+      { type: 'getFocusedElement' as RPAActionType, label: 'Focused Element' },
+      { type: 'saveTxt' as RPAActionType, label: 'Save to Txt' },
+    ],
+  },
+  {
+    name: 'Flow Control',
+    icon: '🔄',
+    actions: [
+      { type: 'forLoop' as RPAActionType, label: 'For Loop Times' },
+      { type: 'ifCondition' as RPAActionType, label: 'If Condition' },
+    ],
+  },
+];
 
-const ACTION_LABELS: Record<RPAAction['type'], string> = {
-  navigate: 'Điều hướng',
-  click: 'Nhấp chuột',
-  type: 'Nhập văn bản',
-  wait: 'Chờ',
-  scroll: 'Cuộn trang',
-  screenshot: 'Chụp màn hình',
+/** Labels for all action types */
+const ACTION_LABELS: Record<RPAActionType, string> = {} as Record<RPAActionType, string>;
+ACTION_CATEGORIES.forEach((cat) => cat.actions.forEach((a) => { ACTION_LABELS[a.type] = a.label; }));
+
+/** Icon for each action type */
+const ACTION_ICONS: Partial<Record<RPAActionType, string>> = {
+  newTab: '➕', closeTab: '✖️', closeOtherTabs: '🗂️', switchTab: '🔀',
+  accessWebsite: '🌍', refreshWebpage: '🔄', goBack: '⬅️', screenshot: '📸', hover: '👆',
+  dropdown: '📋', focus: '🎯', click: '🖱️', input: '✏️', scroll: '📜',
+  inputFile: '📁', executeJS: '💻',
+  keys: '⌨️', keyCombination: '🎹',
+  waitTime: '⏱️', waitElement: '👁️', waitRequest: '📡',
+  getURL: '🔗', getClipboard: '📎', getElement: '🏷️', getFocusedElement: '🎯', saveTxt: '💾',
+  forLoop: '🔁', ifCondition: '❓',
 };
 
-const DEMO_TEMPLATES = [
-  { id: 'tpl-1', name: 'Facebook Login', platform: 'facebook' as const, description: 'Đăng nhập Facebook tự động' },
-  { id: 'tpl-2', name: 'Amazon Search', platform: 'amazon' as const, description: 'Tìm kiếm sản phẩm Amazon' },
-  { id: 'tpl-3', name: 'TikTok Browse', platform: 'tiktok' as const, description: 'Duyệt TikTok tự động' },
-];
+const createAction = (type: RPAActionType): RPAAction => {
+  const base: RPAAction = { id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, type, timeout: 10000 };
+  switch (type) {
+    case 'accessWebsite': return { ...base, value: 'https://' };
+    case 'waitTime': return { ...base, timeout: 2000 };
+    case 'waitElement': return { ...base, selector: '', timeout: 10000 };
+    case 'waitRequest': return { ...base, timeout: 10000 };
+    case 'click': case 'focus': case 'hover': case 'dropdown':
+      return { ...base, selector: '' };
+    case 'input': return { ...base, selector: '', value: '' };
+    case 'scroll': return { ...base, direction: 'down', distance: 500 };
+    case 'forLoop': return { ...base, times: 5, loopVariable: 'for_times_index', children: [] };
+    case 'ifCondition': return { ...base, condition: '', children: [] };
+    case 'keys': return { ...base, value: '' };
+    case 'keyCombination': return { ...base, keys: ['Ctrl'] };
+    case 'executeJS': return { ...base, value: '' };
+    case 'switchTab': return { ...base, tabIndex: 0 };
+    default: return base;
+  }
+};
 
 const emptyScript: RPAScript = {
   name: '',
+  group: 'Ungrouped',
   actions: [],
   errorHandling: 'stop',
   maxRetries: 3,
+  afterTaskAction: 'none',
 };
 
 export default function RPAEditorPage() {
   const [script, setScript] = useState<RPAScript>(emptyScript);
-  const [savedScripts, setSavedScripts] = useState<RPAScript[]>([]);
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>(
+    Object.fromEntries(ACTION_CATEGORIES.map((c) => [c.name, true]))
+  );
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [searchOp, setSearchOp] = useState('');
 
-  const addAction = (type: RPAAction['type']) => {
-    const newAction: RPAAction = { type, timeout: 5000 };
-    setScript((prev) => ({ ...prev, actions: [...prev.actions, newAction] }));
+  const addAction = (type: RPAActionType) => {
+    setScript((prev) => ({ ...prev, actions: [...prev.actions, createAction(type)] }));
   };
 
   const updateAction = (index: number, updates: Partial<RPAAction>) => {
@@ -46,233 +138,313 @@ export default function RPAEditorPage() {
     setScript((prev) => ({ ...prev, actions: prev.actions.filter((_, i) => i !== index) }));
   };
 
-  const moveAction = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex) return;
+  const duplicateAction = (index: number) => {
     setScript((prev) => {
+      const copy = { ...prev.actions[index], id: `act-${Date.now()}` };
       const actions = [...prev.actions];
-      const [moved] = actions.splice(fromIndex, 1);
-      actions.splice(toIndex, 0, moved);
+      actions.splice(index + 1, 0, copy);
       return { ...prev, actions };
     });
   };
 
-  const handleDragStart = (index: number) => {
-    setDragIndex(index);
+  const moveAction = (from: number, to: number) => {
+    if (from === to) return;
+    setScript((prev) => {
+      const actions = [...prev.actions];
+      const [moved] = actions.splice(from, 1);
+      actions.splice(to, 0, moved);
+      return { ...prev, actions };
+    });
   };
 
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    if (dragIndex !== null && dragIndex !== index) {
-      moveAction(dragIndex, index);
-      setDragIndex(index);
-    }
-  };
-
-  const handleDragEnd = () => {
-    setDragIndex(null);
+  const toggleCat = (name: string) => {
+    setExpandedCats((prev) => ({ ...prev, [name]: !prev[name] }));
   };
 
   const handleSave = () => {
     if (!script.name.trim()) return;
-    // TODO: IPC call — window.electronAPI.saveRPAScript(script)
-    const saved = { ...script, id: `rpa-${Date.now()}` };
-    setSavedScripts((prev) => [...prev, saved]);
-    setScript(emptyScript);
-  };
-
-  const handleLoadTemplate = (templateId: string) => {
-    // TODO: IPC call — window.electronAPI.loadRPATemplate(templateId)
-    const template = DEMO_TEMPLATES.find((t) => t.id === templateId);
-    if (template) {
-      setScript({
-        name: `${template.name} (copy)`,
-        actions: [
-          { type: 'navigate', value: `https://${template.platform}.com`, timeout: 10000 },
-          { type: 'wait', timeout: 2000 },
-          { type: 'screenshot' },
-        ],
-        errorHandling: 'skip',
-        maxRetries: 3,
-      });
-    }
+    window.electronAPI?.saveRPAScript?.(script);
+    alert(`Đã lưu "${script.name}" với ${script.actions.length} hành động`);
   };
 
   const handleExecute = () => {
-    // TODO: IPC call — window.electronAPI.executeRPAScript(profileId, script)
-    alert(`Thực thi kịch bản "${script.name}" với ${script.actions.length} hành động`);
+    alert(`Thực thi "${script.name}" với ${script.actions.length} hành động`);
   };
 
-  return (
-    <div className="page">
-      <h2>Trình soạn RPA kéo-thả</h2>
+  const filteredCategories = ACTION_CATEGORIES.map((cat) => ({
+    ...cat,
+    actions: searchOp
+      ? cat.actions.filter((a) => a.label.toLowerCase().includes(searchOp.toLowerCase()))
+      : cat.actions,
+  })).filter((cat) => cat.actions.length > 0);
 
-      {/* Templates */}
-      <div className="section">
-        <h3>Mẫu tự động hóa</h3>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {DEMO_TEMPLATES.map((tpl) => (
-            <button key={tpl.id} className="btn btn-sm" onClick={() => handleLoadTemplate(tpl.id)}>
-              {tpl.name} ({tpl.platform})
-            </button>
+  return (
+    <div className="rpa-editor">
+      {/* Left: Operations Panel */}
+      <div className="rpa-operations">
+        <h3>Operations</h3>
+        <input
+          className="rpa-search"
+          placeholder="Search for operations"
+          value={searchOp}
+          onChange={(e) => setSearchOp(e.target.value)}
+        />
+        <div className="rpa-categories">
+          {filteredCategories.map((cat) => (
+            <div key={cat.name} className="rpa-category">
+              <div className="rpa-category-header" onClick={() => toggleCat(cat.name)}>
+                <span>{cat.icon} {cat.name}</span>
+                <span className="rpa-chevron">{expandedCats[cat.name] ? '▾' : '▸'}</span>
+              </div>
+              {expandedCats[cat.name] && (
+                <div className="rpa-category-items">
+                  {cat.actions.map((action) => (
+                    <button
+                      key={action.type}
+                      className="rpa-op-btn"
+                      onClick={() => addAction(action.type)}
+                    >
+                      <span>{action.label}</span>
+                      <span className="rpa-op-add">＋</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Script config */}
-      <div className="section">
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="script-name">Tên kịch bản</label>
+      {/* Right: Process Canvas */}
+      <div className="rpa-canvas-area">
+        {/* Header */}
+        <div className="rpa-header">
+          <div className="rpa-header-actions">
+            <button className="btn btn-sm" onClick={() => alert('Debug')}>⚙ Debug</button>
+            <button className="btn btn-sm" onClick={() => alert('Import')}>📥 Import</button>
+            <button className="btn btn-sm" onClick={() => alert('Export')}>📤 Export</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSave}>💾 Save</button>
+          </div>
+        </div>
+
+        {/* Script Config */}
+        <div className="rpa-config">
+          <div className="rpa-config-row">
+            <label>Process name</label>
             <input
-              id="script-name"
               value={script.name}
               onChange={(e) => setScript({ ...script, name: e.target.value })}
-              placeholder="Nhập tên kịch bản..."
+              placeholder="Enter process name..."
             />
           </div>
-          <div className="form-group">
-            <label htmlFor="error-handling">Xử lý lỗi</label>
+          <div className="rpa-config-row">
+            <label>Select group</label>
+            <select value={script.group} onChange={(e) => setScript({ ...script, group: e.target.value })}>
+              <option value="Ungrouped">Ungrouped</option>
+            </select>
+          </div>
+          <div className="rpa-config-row">
+            <label>On-error</label>
             <select
-              id="error-handling"
               value={script.errorHandling}
               onChange={(e) => setScript({ ...script, errorHandling: e.target.value as 'stop' | 'skip' | 'retry' })}
             >
-              <option value="stop">Dừng ngay (Stop)</option>
-              <option value="skip">Bỏ qua (Skip)</option>
-              <option value="retry">Thử lại (Retry)</option>
+              <option value="stop">Stop</option>
+              <option value="skip">Skip</option>
+              <option value="retry">Retry</option>
+            </select>
+          </div>
+          <div className="rpa-config-row">
+            <label>After task</label>
+            <select
+              value={script.afterTaskAction}
+              onChange={(e) => setScript({ ...script, afterTaskAction: e.target.value as 'clearTab' | 'quitBrowser' | 'none' })}
+            >
+              <option value="none">None</option>
+              <option value="clearTab">Clear tab</option>
+              <option value="quitBrowser">Quit Browser</option>
             </select>
           </div>
         </div>
-        {script.errorHandling === 'retry' && (
-          <div className="form-group">
-            <label htmlFor="max-retries">Số lần thử lại tối đa</label>
-            <input
-              id="max-retries"
-              type="number"
-              min={1}
-              max={10}
-              value={script.maxRetries ?? 3}
-              onChange={(e) => setScript({ ...script, maxRetries: parseInt(e.target.value) || 3 })}
-            />
+
+        {/* Process Steps */}
+        <div className="rpa-process">
+          <div className="rpa-process-header">
+            <span>Process ({script.actions.length})</span>
           </div>
-        )}
-      </div>
-
-      {/* Action palette */}
-      <div className="section">
-        <h3>Thêm hành động</h3>
-        <div className="rpa-palette">
-          {ACTION_TYPES.map((type) => (
-            <button key={type} onClick={() => addAction(type)}>
-              + {ACTION_LABELS[type]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Canvas */}
-      <div className="section">
-        <h3>Kịch bản ({script.actions.length} hành động)</h3>
-        <div className="rpa-canvas">
-          {script.actions.length === 0 ? (
-            <div className="empty-state">
-              <p>Kéo-thả hoặc nhấn nút để thêm hành động</p>
-            </div>
-          ) : (
-            script.actions.map((action, index) => (
-              <div
-                key={index}
-                className="rpa-block"
-                draggable
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={(e) => handleDragOver(e, index)}
-                onDragEnd={handleDragEnd}
-                style={{ opacity: dragIndex === index ? 0.5 : 1 }}
-              >
-                <span style={{ color: '#999', fontSize: '0.75rem', minWidth: '20px' }}>#{index + 1}</span>
-                <span className="block-type">{ACTION_LABELS[action.type]}</span>
-                <div className="block-config" style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
-                  {(action.type === 'navigate' || action.type === 'click' || action.type === 'type' || action.type === 'scroll') && (
-                    <input
-                      style={{ flex: 1, padding: '0.25rem 0.5rem', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.8rem' }}
-                      placeholder={action.type === 'navigate' ? 'URL...' : 'CSS selector...'}
-                      value={action.type === 'navigate' ? (action.value ?? '') : (action.selector ?? '')}
-                      onChange={(e) =>
-                        updateAction(index, action.type === 'navigate' ? { value: e.target.value } : { selector: e.target.value })
-                      }
-                    />
-                  )}
-                  {action.type === 'type' && (
-                    <input
-                      style={{ flex: 1, padding: '0.25rem 0.5rem', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.8rem' }}
-                      placeholder="Văn bản nhập..."
-                      value={action.value ?? ''}
-                      onChange={(e) => updateAction(index, { value: e.target.value })}
-                    />
-                  )}
-                  {action.type === 'wait' && (
-                    <input
-                      style={{ width: '80px', padding: '0.25rem 0.5rem', border: '1px solid #ddd', borderRadius: '3px', fontSize: '0.8rem' }}
-                      type="number"
-                      placeholder="ms"
-                      value={action.timeout ?? 1000}
-                      onChange={(e) => updateAction(index, { timeout: parseInt(e.target.value) || 1000 })}
-                    />
-                  )}
-                </div>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={() => removeAction(index)}
-                  style={{ flexShrink: 0 }}
-                >
-                  ✕
-                </button>
+          <div className="rpa-steps">
+            {script.actions.length === 0 ? (
+              <div className="rpa-empty">
+                <p>Click an operation from the left panel to add steps</p>
               </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="form-actions">
-        <button className="btn btn-primary" onClick={handleSave} disabled={!script.name.trim()}>
-          Lưu kịch bản
-        </button>
-        <button className="btn btn-success" onClick={handleExecute} disabled={script.actions.length === 0}>
-          ▶ Thực thi
-        </button>
-      </div>
-
-      {/* Saved scripts */}
-      {savedScripts.length > 0 && (
-        <div className="section" style={{ marginTop: '1.5rem' }}>
-          <h3>Kịch bản đã lưu</h3>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>Tên</th>
-                  <th>Số hành động</th>
-                  <th>Xử lý lỗi</th>
-                  <th>Hành động</th>
-                </tr>
-              </thead>
-              <tbody>
-                {savedScripts.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.name}</td>
-                    <td>{s.actions.length}</td>
-                    <td>{s.errorHandling}</td>
-                    <td>
-                      <button className="btn btn-sm" onClick={() => setScript(s)}>Tải</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            ) : (
+              script.actions.map((action, index) => (
+                <div
+                  key={action.id || index}
+                  className={`rpa-step ${dragIndex === index ? 'dragging' : ''}`}
+                  draggable
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragIndex !== index) { moveAction(dragIndex, index); setDragIndex(index); } }}
+                  onDragEnd={() => setDragIndex(null)}
+                >
+                  <div className="rpa-step-handle">⠿</div>
+                  <div className="rpa-step-icon">{ACTION_ICONS[action.type] || '▶'}</div>
+                  <div className="rpa-step-content">
+                    <div className="rpa-step-title">{ACTION_LABELS[action.type] || action.type}</div>
+                    <div className="rpa-step-config">
+                      {renderActionConfig(action, index, updateAction)}
+                    </div>
+                  </div>
+                  <div className="rpa-step-actions">
+                    <button title="Duplicate" onClick={() => duplicateAction(index)}>📋</button>
+                    <button title="Delete" onClick={() => removeAction(index)}>🗑️</button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
-      )}
+
+        {/* Execute */}
+        <div className="rpa-footer">
+          <button className="btn btn-success" onClick={handleExecute} disabled={script.actions.length === 0}>
+            ▶ Execute
+          </button>
+        </div>
+      </div>
     </div>
   );
+}
+
+
+/** Render inline config fields for each action type */
+function renderActionConfig(
+  action: RPAAction,
+  index: number,
+  update: (i: number, u: Partial<RPAAction>) => void,
+) {
+  switch (action.type) {
+    case 'accessWebsite':
+      return (
+        <div className="rpa-fields">
+          <label>Access URL</label>
+          <input value={action.value || ''} onChange={(e) => update(index, { value: e.target.value })} placeholder="https://..." />
+          <label>Timeout waiting</label>
+          <input type="number" value={action.timeout || 10000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 10000 })} />
+          <span className="rpa-unit">Millisecond</span>
+        </div>
+      );
+    case 'click': case 'focus': case 'hover': case 'dropdown':
+      return (
+        <div className="rpa-fields">
+          <label>Selector</label>
+          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
+        </div>
+      );
+    case 'input':
+      return (
+        <div className="rpa-fields">
+          <label>Selector</label>
+          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
+          <label>Text</label>
+          <input value={action.value || ''} onChange={(e) => update(index, { value: e.target.value })} placeholder="Text to input..." />
+        </div>
+      );
+    case 'waitTime':
+      return (
+        <div className="rpa-fields">
+          <label>Wait</label>
+          <input type="number" value={action.timeout || 2000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 2000 })} />
+          <span className="rpa-unit">ms</span>
+        </div>
+      );
+    case 'waitElement':
+      return (
+        <div className="rpa-fields">
+          <label>Selector</label>
+          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
+          <label>Timeout</label>
+          <input type="number" value={action.timeout || 10000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 10000 })} />
+          <span className="rpa-unit">ms</span>
+        </div>
+      );
+    case 'waitRequest':
+      return (
+        <div className="rpa-fields">
+          <label>Timeout</label>
+          <input type="number" value={action.timeout || 10000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 10000 })} />
+          <span className="rpa-unit">ms</span>
+        </div>
+      );
+    case 'scroll':
+      return (
+        <div className="rpa-fields">
+          <label>Direction</label>
+          <select value={action.direction || 'down'} onChange={(e) => update(index, { direction: e.target.value as 'up' | 'down' })}>
+            <option value="down">Down</option>
+            <option value="up">Up</option>
+          </select>
+          <label>Distance</label>
+          <input type="number" value={action.distance || 500} onChange={(e) => update(index, { distance: parseInt(e.target.value) || 500 })} />
+          <span className="rpa-unit">px</span>
+        </div>
+      );
+    case 'forLoop':
+      return (
+        <div className="rpa-fields">
+          <label>Times</label>
+          <input type="number" value={action.times || 5} onChange={(e) => update(index, { times: parseInt(e.target.value) || 1 })} />
+          <label>Save loop index to</label>
+          <input value={action.loopVariable || 'for_times_index'} onChange={(e) => update(index, { loopVariable: e.target.value })} />
+        </div>
+      );
+    case 'executeJS':
+      return (
+        <div className="rpa-fields">
+          <label>JavaScript code</label>
+          <textarea
+            value={action.value || ''}
+            onChange={(e) => update(index, { value: e.target.value })}
+            placeholder="// Your JavaScript code here..."
+            rows={3}
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.8rem' }}
+          />
+        </div>
+      );
+    case 'keys':
+      return (
+        <div className="rpa-fields">
+          <label>Key</label>
+          <input value={action.value || ''} onChange={(e) => update(index, { value: e.target.value })} placeholder="Enter, Tab, Escape..." />
+        </div>
+      );
+    case 'keyCombination':
+      return (
+        <div className="rpa-fields">
+          <label>Keys</label>
+          <input value={(action.keys || []).join('+')} onChange={(e) => update(index, { keys: e.target.value.split('+') })} placeholder="Ctrl+C, Ctrl+V..." />
+        </div>
+      );
+    case 'switchTab':
+      return (
+        <div className="rpa-fields">
+          <label>Tab index</label>
+          <input type="number" value={action.tabIndex || 0} onChange={(e) => update(index, { tabIndex: parseInt(e.target.value) || 0 })} />
+        </div>
+      );
+    case 'getElement':
+      return (
+        <div className="rpa-fields">
+          <label>Selector</label>
+          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
+        </div>
+      );
+    case 'getURL': case 'getClipboard': case 'getFocusedElement':
+    case 'newTab': case 'closeTab': case 'closeOtherTabs':
+    case 'refreshWebpage': case 'goBack': case 'screenshot':
+    case 'inputFile': case 'saveTxt': case 'ifCondition':
+      return <div className="rpa-fields"><span className="rpa-hint">No configuration needed</span></div>;
+    default:
+      return null;
+  }
 }
