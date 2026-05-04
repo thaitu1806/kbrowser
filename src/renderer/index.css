@@ -2476,3 +2476,53 @@ tr:hover { background: #f8faff; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(74,108,247,0.3); }
   50% { box-shadow: 0 0 0 4px rgba(74,108,247,0.1); }
 }
+
+
+/* Use Variable Dropdown */
+.use-var-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.use-var-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 380px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 300;
+  overflow: hidden;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.use-var-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.use-var-item:last-child { border-bottom: none; }
+.use-var-item:hover { background: var(--primary-light); }
+
+.use-var-name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.use-var-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}

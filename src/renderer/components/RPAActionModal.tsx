@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { RPAAction, RPAActionType } from '@shared/types';
+import UseVariableDropdown from './UseVariableDropdown';
 
 interface Props {
   action: RPAAction;
@@ -57,6 +58,7 @@ function DescriptionField({ value, onChange }: { value?: string; onChange: (v: s
 
 /** Reusable selector field with Selector/Stored element tabs, CSS/XPath/Text radio */
 function SelectorField({ data, set }: { data: RPAAction; set: (u: Partial<RPAAction>) => void }) {
+  const selectorRef = useRef<HTMLInputElement>(null);
   return (
     <>
       <div className="rpa-modal-field">
@@ -74,8 +76,8 @@ function SelectorField({ data, set }: { data: RPAAction; set: (u: Partial<RPAAct
             <label><input type="radio" checked={data.selectorType === 'text'} onChange={() => set({ selectorType: 'text' })} /> Text</label>
           </div>
           <div className="rpa-field-row">
-            <input value={data.selector || ''} onChange={(e) => set({ selector: e.target.value })} placeholder="Please enter the element, such as #email input" style={{ flex: 1 }} />
-            <span className="rpa-var-link">Use Variable*</span>
+            <input ref={selectorRef} value={data.selector || ''} onChange={(e) => set({ selector: e.target.value })} placeholder="Please enter the element, such as #email input" style={{ flex: 1 }} />
+            <UseVariableDropdown value={data.selector || ''} onChange={(v) => set({ selector: v })} inputRef={selectorRef} />
           </div>
         </div>
       ) : (
@@ -121,25 +123,7 @@ function renderFields(data: RPAAction, set: (u: Partial<RPAAction>) => void) {
   switch (data.type) {
     // ─── Access Website ───
     case 'accessWebsite':
-      return (
-        <>
-          <div className="rpa-modal-field">
-            <label>* Access URL</label>
-            <div className="rpa-field-row">
-              <input value={data.value || ''} onChange={(e) => set({ value: e.target.value })} placeholder="https://..." style={{ flex: 1 }} />
-              <span className="rpa-var-link">Use Variable*</span>
-            </div>
-          </div>
-          <div className="rpa-modal-field">
-            <label>Timeout waiting</label>
-            <div className="rpa-field-row">
-              <input type="number" value={data.timeout || 10000} onChange={(e) => set({ timeout: parseInt(e.target.value) || 10000 })} style={{ width: 120 }} />
-              <span className="rpa-unit">Millisecond</span>
-              <span className="rpa-hint">1 second = 1000 milliseconds</span>
-            </div>
-          </div>
-        </>
-      );
+      return <AccessWebsiteFields data={data} set={set} />;
 
     // ─── Click ───
     case 'click':
@@ -607,6 +591,30 @@ function renderFields(data: RPAAction, set: (u: Partial<RPAAction>) => void) {
     default:
       return <div className="rpa-modal-field"><span className="rpa-hint">No additional configuration needed</span></div>;
   }
+}
+
+/** Access Website fields with Use Variable support */
+function AccessWebsiteFields({ data, set }: { data: RPAAction; set: (u: Partial<RPAAction>) => void }) {
+  const urlRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <div className="rpa-modal-field">
+        <label>* Access URL</label>
+        <div className="rpa-field-row">
+          <input ref={urlRef} value={data.value || ''} onChange={(e) => set({ value: e.target.value })} placeholder="https://..." style={{ flex: 1 }} />
+          <UseVariableDropdown value={data.value || ''} onChange={(v) => set({ value: v })} inputRef={urlRef} />
+        </div>
+      </div>
+      <div className="rpa-modal-field">
+        <label>Timeout waiting</label>
+        <div className="rpa-field-row">
+          <input type="number" value={data.timeout || 10000} onChange={(e) => set({ timeout: parseInt(e.target.value) || 10000 })} style={{ width: 120 }} />
+          <span className="rpa-unit">Millisecond</span>
+          <span className="rpa-hint">1 second = 1000 milliseconds</span>
+        </div>
+      </div>
+    </>
+  );
 }
 
 /** Key combination recorder component */
