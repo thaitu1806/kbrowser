@@ -125,6 +125,10 @@ export default function RPAEditorPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [searchOp, setSearchOp] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [importJson, setImportJson] = useState('');
+  const [importMode, setImportMode] = useState<'append' | 'replace'>('replace');
 
   const addAction = (type: RPAActionType) => {
     setScript((prev) => ({ ...prev, actions: [...prev.actions, createAction(type)] }));
@@ -165,47 +169,38 @@ export default function RPAEditorPage() {
   };
 
   const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const adsActions = JSON.parse(text);
-        if (!Array.isArray(adsActions)) {
-          alert('Invalid format: expected JSON array');
-          return;
-        }
-        const converted = importFromAdsPower(adsActions);
-        setScript((prev) => ({
-          ...prev,
-          name: prev.name || file.name.replace('.json', ''),
-          actions: [...prev.actions, ...converted],
-        }));
-        alert(`Imported ${converted.length} actions`);
-      } catch (err) {
-        alert(`Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    setImportJson('');
+    setImportMode('replace');
+    setShowImportModal(true);
+  };
+
+  const handleImportConfirm = () => {
+    try {
+      const adsActions = JSON.parse(importJson);
+      if (!Array.isArray(adsActions)) {
+        alert('Invalid format: expected JSON array');
+        return;
       }
-    };
-    input.click();
+      const converted = importFromAdsPower(adsActions);
+      if (importMode === 'replace') {
+        setScript((prev) => ({ ...prev, actions: converted }));
+      } else {
+        setScript((prev) => ({ ...prev, actions: [...prev.actions, ...converted] }));
+      }
+      setShowImportModal(false);
+      setImportJson('');
+    } catch (err) {
+      alert(`Import failed: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
+    }
   };
 
   const handleExport = () => {
-    if (script.actions.length === 0) {
-      alert('No actions to export');
-      return;
-    }
-    const adsFormat = exportToAdsPower(script.actions);
-    const json = JSON.stringify(adsFormat, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${script.name || 'rpa-process'}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setShowExportModal(true);
+  };
+
+  const getExportJson = () => {
+    if (script.actions.length === 0) return '[]';
+    return JSON.stringify(exportToAdsPower(script.actions), null, 2);
   };
 
   const handleSave = () => {
@@ -372,10 +367,81 @@ export default function RPAEditorPage() {
           onCancel={() => setEditingIndex(null)}
         />
       )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal-content rpa-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Import</h3>
+              <button className="modal-close" onClick={() => setShowImportModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="rpa-modal-field">
+                <label>Process JSON</label>
+                <textarea
+                  value={importJson}
+                  onChange={(e) => setImportJson(e.target.value)}
+                  placeholder="Please paste the JSON of the corresponding process here"
+                  rows={10}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '12px', border: importJson && !isValidJson(importJson) ? '2px solid var(--danger)' : undefined }}
+                />
+              </div>
+              <div className="rpa-modal-field">
+                <label>Imported content</label>
+                <div className="rpa-radio-row">
+                  <label><input type="radio" checked={importMode === 'append'} onChange={() => setImportMode('append')} /> Append</label>
+                  <label><input type="radio" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} /> Replace</label>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={handleImportConfirm} disabled={!importJson.trim()}>OK</button>
+              <button className="btn" onClick={() => setShowImportModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
+          <div className="modal-content rpa-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Export</h3>
+              <button className="modal-close" onClick={() => setShowExportModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="rpa-modal-field">
+                <label>Process JSON</label>
+                <textarea
+                  value={getExportJson()}
+                  readOnly
+                  rows={14}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '11px', background: '#f9fafb' }}
+                  onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={() => {
+                navigator.clipboard.writeText(getExportJson());
+                setShowExportModal(false);
+              }}>📋 Copy</button>
+              <button className="btn" onClick={() => setShowExportModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+
+/** Check if string is valid JSON */
+function isValidJson(str: string): boolean {
+  try { JSON.parse(str); return true; } catch { return false; }
+}
 
 /** Render inline config fields for each action type */
 function renderActionConfig(
