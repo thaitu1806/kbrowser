@@ -599,133 +599,108 @@ function isValidJson(str: string): boolean {
   try { JSON.parse(str); return true; } catch { return false; }
 }
 
-/** Render inline config fields for each action type */
+/** Render inline config summary for each action type (read-only, matching AdsPower) */
 function renderActionConfig(
   action: RPAAction,
-  index: number,
-  update: (i: number, u: Partial<RPAAction>) => void,
+  _index: number,
+  _update: (i: number, u: Partial<RPAAction>) => void,
 ) {
+  const b = (v: string | number | undefined) => <b className="rpa-inline-val">{v ?? '—'}</b>;
+
   switch (action.type) {
     case 'accessWebsite':
       return (
-        <div className="rpa-fields">
-          <label>Access URL</label>
-          <input value={action.value || ''} onChange={(e) => update(index, { value: e.target.value })} placeholder="https://..." />
-          <label>Timeout waiting</label>
-          <input type="number" value={action.timeout || 10000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 10000 })} />
-          <span className="rpa-unit">Millisecond</span>
-        </div>
+        <span className="rpa-inline-summary">
+          Access URL {b(action.value)} , Timeout waiting {b(action.timeout || 10000)} Millisecond
+          {action.description && <><br /><span className="rpa-inline-desc">ℹ️ {action.description}</span></>}
+        </span>
       );
-    case 'click': case 'focus': case 'hover': case 'dropdown':
+    case 'click':
       return (
-        <div className="rpa-fields">
-          <label>Selector</label>
-          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
-        </div>
+        <span className="rpa-inline-summary">
+          Selector: [{action.selectorType === 'xpath' ? 'XPath' : action.selectorType === 'text' ? 'Text' : 'Selector'}] {b(action.selector)}
+          {action.elementOrder === 'random' && <> , Element order {b(`${action.elementOrderMin || 1} - ${action.elementOrderMax || 1}`)}</>}
+          {action.elementOrder === 'fixed' && <> , Element order {b(action.elementOrderMin || 1)}</>}
+          {' '}, Button act: {b(action.buttonAct === 'right' ? 'Right click' : action.buttonAct === 'double' ? 'Double click' : 'Left click')}
+          {' '}, Click act: {b(action.clickAct || 'Click')}
+        </span>
       );
     case 'input':
       return (
-        <div className="rpa-fields">
-          <label>Selector</label>
-          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
-          <label>Text</label>
-          <input value={action.value || ''} onChange={(e) => update(index, { value: e.target.value })} placeholder="Text to input..." />
-        </div>
+        <span className="rpa-inline-summary">
+          Selector: {b(action.selector)} , Text: {b(action.value)}
+        </span>
+      );
+    case 'hover': case 'focus':
+      return (
+        <span className="rpa-inline-summary">
+          Selector: [{action.selectorType === 'xpath' ? 'XPath' : 'Selector'}] {b(action.selector)}
+          {action.elementOrder === 'fixed' && <> , Element order {b(action.elementOrderMin || 1)}</>}
+        </span>
+      );
+    case 'dropdown':
+      return (
+        <span className="rpa-inline-summary">
+          Selector: {b(action.selector)} , Value: {b(action.optionValue)}
+        </span>
       );
     case 'waitTime':
       return (
-        <div className="rpa-fields">
-          <label>Wait</label>
-          <input type="number" value={action.timeout || 2000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 2000 })} />
-          <span className="rpa-unit">ms</span>
-        </div>
+        <span className="rpa-inline-summary">
+          Wait {action.timeoutMode === 'random'
+            ? b(`${action.timeoutMin || 5000} - ${action.timeoutMax || 30000}`)
+            : b(action.timeout || 5000)
+          } Millisecond
+        </span>
       );
     case 'waitElement':
       return (
-        <div className="rpa-fields">
-          <label>Selector</label>
-          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
-          <label>Timeout</label>
-          <input type="number" value={action.timeout || 10000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 10000 })} />
-          <span className="rpa-unit">ms</span>
-        </div>
+        <span className="rpa-inline-summary">
+          Selector: {b(action.selector)} , Timeout {b(action.timeout || 30000)} ms
+        </span>
       );
     case 'waitRequest':
       return (
-        <div className="rpa-fields">
-          <label>Timeout</label>
-          <input type="number" value={action.timeout || 10000} onChange={(e) => update(index, { timeout: parseInt(e.target.value) || 10000 })} />
-          <span className="rpa-unit">ms</span>
-        </div>
+        <span className="rpa-inline-summary">
+          {action.responseUrl && <>URL: {b(action.responseUrl)} , </>}Timeout {b(action.timeout || 30000)} ms
+        </span>
       );
     case 'scroll':
       return (
-        <div className="rpa-fields">
-          <label>Direction</label>
-          <select value={action.direction || 'down'} onChange={(e) => update(index, { direction: e.target.value as 'up' | 'down' })}>
-            <option value="down">Down</option>
-            <option value="up">Up</option>
-          </select>
-          <label>Distance</label>
-          <input type="number" value={action.distance || 500} onChange={(e) => update(index, { distance: parseInt(e.target.value) || 500 })} />
-          <span className="rpa-unit">px</span>
-        </div>
+        <span className="rpa-inline-summary">
+          Scroll distance: {b(action.scrollTarget === 'selector' ? 'Selector' : 'Page')}
+          {' '}, Position: {b(action.scrollPosition || 'Bottom')}
+          {' '}, Scroll Type: {b(action.scrollType || 'Smooth')}
+        </span>
       );
-    case 'forLoop':
+    case 'screenshot':
       return (
-        <div className="rpa-fields">
-          <label>Times</label>
-          <input type="number" value={action.times || 5} onChange={(e) => update(index, { times: parseInt(e.target.value) || 1 })} />
-          <label>Save loop index to</label>
-          <input value={action.loopVariable || 'for_times_index'} onChange={(e) => update(index, { loopVariable: e.target.value })} />
-        </div>
+        <span className="rpa-inline-summary">
+          {action.screenshotName ? <>Name: {b(action.screenshotName)}</> : 'Default name'}
+          {' '}, Format: {b(action.screenshotFormat || 'png')}
+          {action.screenshotFullPage !== false && ' , Full-page'}
+        </span>
       );
     case 'executeJS':
       return (
-        <div className="rpa-fields">
-          <label>JavaScript code</label>
-          <textarea
-            value={action.value || ''}
-            onChange={(e) => update(index, { value: e.target.value })}
-            placeholder="// Your JavaScript code here..."
-            rows={3}
-            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.8rem' }}
-          />
-        </div>
+        <span className="rpa-inline-summary">
+          {action.value ? `${action.value.slice(0, 50)}${action.value.length > 50 ? '...' : ''}` : 'No code'}
+        </span>
       );
     case 'keys':
-      return (
-        <div className="rpa-fields">
-          <label>Key</label>
-          <input value={action.value || ''} onChange={(e) => update(index, { value: e.target.value })} placeholder="Enter, Tab, Escape..." />
-        </div>
-      );
+      return <span className="rpa-inline-summary">Key: {b(action.value || 'Enter')}</span>;
     case 'keyCombination':
-      return (
-        <div className="rpa-fields">
-          <label>Keys</label>
-          <input value={(action.keys || []).join('+')} onChange={(e) => update(index, { keys: e.target.value.split('+') })} placeholder="Ctrl+C, Ctrl+V..." />
-        </div>
-      );
+      return <span className="rpa-inline-summary">Keys: {b((action.keys || []).join('+') || action.recordedKeys)}</span>;
     case 'switchTab':
-      return (
-        <div className="rpa-fields">
-          <label>Tab index</label>
-          <input type="number" value={action.tabIndex || 0} onChange={(e) => update(index, { tabIndex: parseInt(e.target.value) || 0 })} />
-        </div>
-      );
+      return <span className="rpa-inline-summary">Tab index: {b(action.tabIndex || 0)}</span>;
+    case 'getURL':
+      return <span className="rpa-inline-summary">Type: {b(action.extractionType || 'Full Url')} → {b(action.saveTo || '—')}</span>;
     case 'getElement':
-      return (
-        <div className="rpa-fields">
-          <label>Selector</label>
-          <input value={action.selector || ''} onChange={(e) => update(index, { selector: e.target.value })} placeholder="CSS selector..." />
-        </div>
-      );
-    case 'getURL': case 'getClipboard': case 'getFocusedElement':
-    case 'newTab': case 'closeTab': case 'closeOtherTabs':
-    case 'refreshWebpage': case 'goBack': case 'screenshot':
-    case 'inputFile': case 'saveTxt': case 'ifCondition':
-      return <div className="rpa-fields"><span className="rpa-hint">No configuration needed</span></div>;
+      return <span className="rpa-inline-summary">Selector: {b(action.selector)} → {b(action.saveTo || '—')}</span>;
+    case 'getClipboard': case 'getFocusedElement':
+      return <span className="rpa-inline-summary">Save to: {b(action.saveTo || '—')}</span>;
+    case 'goBack':
+      return <span className="rpa-inline-summary">Timeout {b(action.timeout || 30000)} ms</span>;
     default:
       return null;
   }
