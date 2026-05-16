@@ -149,4 +149,84 @@ CREATE TABLE IF NOT EXISTS groups (
 
 -- Add group_id to profiles if not exists (migration-safe)
 -- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we use a pragma check
+
+-- RPA Tasks table: stores each RPA execution unit
+CREATE TABLE IF NOT EXISTS rpa_tasks (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  script_id TEXT NOT NULL,
+  batch_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+  execution_order TEXT NOT NULL DEFAULT 'ordered'
+    CHECK (execution_order IN ('ordered', 'random')),
+  task_type TEXT NOT NULL DEFAULT 'common'
+    CHECK (task_type IN ('common', 'scheduled')),
+  priority INTEGER NOT NULL DEFAULT 0
+    CHECK (priority IN (0, 1)),
+  queue_position INTEGER NOT NULL DEFAULT 0,
+  actions_completed INTEGER NOT NULL DEFAULT 0,
+  total_actions INTEGER NOT NULL DEFAULT 0,
+  current_action TEXT,
+  error_message TEXT,
+  error_details TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+  FOREIGN KEY (script_id) REFERENCES rpa_scripts(id) ON DELETE SET NULL
+);
+
+-- RPA Schedules table: automatic execution configuration
+CREATE TABLE IF NOT EXISTS rpa_schedules (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  script_id TEXT NOT NULL,
+  cron_expression TEXT NOT NULL,
+  execution_order TEXT NOT NULL DEFAULT 'ordered'
+    CHECK (execution_order IN ('ordered', 'random')),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'paused', 'cancelled', 'expired')),
+  start_time TEXT,
+  end_time TEXT,
+  last_triggered_at TEXT,
+  next_trigger_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+  FOREIGN KEY (script_id) REFERENCES rpa_scripts(id) ON DELETE SET NULL
+);
+
+-- Profile RPA Config table: stores most recent RPA config per profile
+CREATE TABLE IF NOT EXISTS profile_rpa_config (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL UNIQUE,
+  script_id TEXT,
+  original_script_id TEXT,
+  execution_order TEXT NOT NULL DEFAULT 'ordered'
+    CHECK (execution_order IN ('ordered', 'random')),
+  task_type TEXT NOT NULL DEFAULT 'common'
+    CHECK (task_type IN ('common', 'scheduled')),
+  priority INTEGER NOT NULL DEFAULT 0
+    CHECK (priority IN (0, 1)),
+  schedule_config TEXT,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+  FOREIGN KEY (script_id) REFERENCES rpa_scripts(id) ON DELETE SET NULL
+);
+
+-- RPA Tasks indexes
+CREATE INDEX IF NOT EXISTS idx_rpa_tasks_profile_id ON rpa_tasks(profile_id);
+CREATE INDEX IF NOT EXISTS idx_rpa_tasks_status ON rpa_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_rpa_tasks_batch_id ON rpa_tasks(batch_id);
+CREATE INDEX IF NOT EXISTS idx_rpa_tasks_queue_position ON rpa_tasks(profile_id, status, queue_position);
+
+-- RPA Schedules indexes
+CREATE INDEX IF NOT EXISTS idx_rpa_schedules_profile_id ON rpa_schedules(profile_id);
+CREATE INDEX IF NOT EXISTS idx_rpa_schedules_status ON rpa_schedules(status);
+CREATE INDEX IF NOT EXISTS idx_rpa_schedules_next_trigger ON rpa_schedules(next_trigger_at);
+
+-- Profile RPA Config index
+CREATE INDEX IF NOT EXISTS idx_profile_rpa_config_profile_id ON profile_rpa_config(profile_id);
 `;

@@ -375,10 +375,12 @@ export class ProfileManager {
           });
 
           // Use Emulation domain to override screen metrics at engine level
+          // width/height = 0 means "use actual window size" — avoids content offset
+          // screenWidth/screenHeight spoof screen.width/screen.height for fingerprint
           await cdp.send('Emulation.setDeviceMetricsOverride', {
-            width: screenW2,
-            height: screenH2,
-            deviceScaleFactor: 1,
+            width: 0,
+            height: 0,
+            deviceScaleFactor: 0,
             mobile: false,
             screenWidth: screenW2,
             screenHeight: screenH2,

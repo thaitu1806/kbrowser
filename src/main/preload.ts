@@ -63,6 +63,46 @@ contextBridge.exposeInMainWorld('electronAPI', {
   listRPATemplates: (platform?: string) => ipcRenderer.invoke('rpa:templates', platform),
   loadRPATemplate: (id: string) => ipcRenderer.invoke('rpa:loadTemplate', id),
 
+  // ─── RPA Orchestrator ───
+  rpaOrchestratorCreateTask: (profileId: string, scriptId: string, config: unknown) =>
+    ipcRenderer.invoke('rpa-orchestrator:create-task', profileId, scriptId, config),
+  rpaOrchestratorBatchExecute: (config: unknown) =>
+    ipcRenderer.invoke('rpa-orchestrator:batch-execute', config),
+  rpaOrchestratorCancelTask: (taskId: string) =>
+    ipcRenderer.invoke('rpa-orchestrator:cancel-task', taskId),
+  rpaOrchestratorCancelAll: (profileId: string) =>
+    ipcRenderer.invoke('rpa-orchestrator:cancel-all', profileId),
+  rpaOrchestratorGetQueue: (profileId: string) =>
+    ipcRenderer.invoke('rpa-orchestrator:get-queue', profileId),
+  rpaOrchestratorGetHistory: (profileId: string, limit?: number) =>
+    ipcRenderer.invoke('rpa-orchestrator:get-history', profileId, limit),
+  rpaOrchestratorCreateSchedule: (profileId: string, scriptId: string, scheduleConfig: unknown) =>
+    ipcRenderer.invoke('rpa-orchestrator:create-schedule', profileId, scriptId, scheduleConfig),
+  rpaOrchestratorCancelSchedule: (scheduleId: string) =>
+    ipcRenderer.invoke('rpa-orchestrator:cancel-schedule', scheduleId),
+  rpaOrchestratorGetSchedules: () =>
+    ipcRenderer.invoke('rpa-orchestrator:get-schedules'),
+  rpaOrchestratorSaveConfig: (profileId: string, config: unknown) =>
+    ipcRenderer.invoke('rpa-orchestrator:save-config', profileId, config),
+  rpaOrchestratorGetConfig: (profileId: string) =>
+    ipcRenderer.invoke('rpa-orchestrator:get-config', profileId),
+  rpaOrchestratorSetMaxConcurrency: (max: number) =>
+    ipcRenderer.invoke('rpa-orchestrator:set-max-concurrency', max),
+
+  // Event listeners for RPA orchestrator real-time updates
+  onRpaTaskProgress: (callback: (event: unknown) => void) => {
+    ipcRenderer.on('rpa-orchestrator:task-progress', (_event, data) => callback(data));
+  },
+  onRpaBatchComplete: (callback: (report: unknown) => void) => {
+    ipcRenderer.on('rpa-orchestrator:batch-complete', (_event, data) => callback(data));
+  },
+  removeRpaTaskProgressListener: () => {
+    ipcRenderer.removeAllListeners('rpa-orchestrator:task-progress');
+  },
+  removeRpaBatchCompleteListener: () => {
+    ipcRenderer.removeAllListeners('rpa-orchestrator:batch-complete');
+  },
+
   // ─── RBAC ───
   createUser: (request: unknown) => ipcRenderer.invoke('rbac:createUser', request),
   updateRole: (userId: string, role: unknown) => ipcRenderer.invoke('rbac:updateRole', userId, role),

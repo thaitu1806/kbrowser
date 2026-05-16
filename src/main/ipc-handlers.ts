@@ -4,7 +4,7 @@
  * Registers ipcMain.handle() for each operation the UI needs.
  */
 
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
 import path from 'path';
 import { app } from 'electron';
 import { initializeDatabase } from './database/index';
@@ -16,6 +16,7 @@ import { ActionLogger } from './services/action-logger/action-logger';
 import { RPAEngine } from './services/rpa-engine/rpa-engine';
 import { ExtensionCenter } from './services/extension-center/extension-center';
 import { ProfileSerializer } from './services/profile-serializer/profile-serializer';
+import { RPAOrchestrator } from './services/rpa-orchestrator';
 import type { ProfileConfig, ProxyConfig } from '../shared/types';
 
 let profileManager: ProfileManager;
@@ -26,6 +27,7 @@ let actionLogger: ActionLogger;
 let rpaEngine: RPAEngine;
 let extensionCenter: ExtensionCenter;
 let profileSerializer: ProfileSerializer;
+let rpaOrchestrator: RPAOrchestrator;
 
 /** Initialize all services and register IPC handlers. Returns profileManager for cleanup. */
 export function setupIPC(): { profileManager: ProfileManager } {
@@ -43,6 +45,28 @@ export function setupIPC(): { profileManager: ProfileManager } {
   rpaEngine = new RPAEngine(db);
   extensionCenter = new ExtensionCenter(db);
   profileSerializer = new ProfileSerializer();
+  rpaOrchestrator = new RPAOrchestrator(db, profileManager, rpaEngine);
+  rpaOrchestrator.restoreSchedules();
+  rpaOrchestrator.startQueueProcessing();
+
+  // Forward RPA orchestrator events to renderer
+  rpaOrchestrator.on('task:progress', (event) => {
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('rpa-orchestrator:task-progress', event);
+      }
+    });
+  });
+
+  rpaOrchestrator.on('batch:complete', (report) => {
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send('rpa-orchestrator:batch-complete', report);
+      }
+    });
+  });
 
   // Ensure a default admin user exists
   ensureDefaultUser();
@@ -694,6 +718,55 @@ export function setupIPC(): { profileManager: ProfileManager } {
 
   ipcMain.handle('serializer:validate', async (_event, json: string) => {
     return profileSerializer.validate(json);
+  });
+
+  // ─── RPA Orchestrator handlers ───
+  ipcMain.handle('rpa-orchestrator:create-task', async (_event, profileId: string, scriptId: string, config: any) => {
+    return rpaOrchestrator.createTask(profileId, scriptId, config);
+  });
+
+  ipcMain.handle('rpa-orchestrator:batch-execute', async (_event, config: any) => {
+    return rpaOrchestrator.executeBatch(config);
+  });
+
+  ipcMain.handle('rpa-orchestrator:cancel-task', async (_event, taskId: string) => {
+    rpaOrchestrator.cancelTask(taskId);
+  });
+
+  ipcMain.handle('rpa-orchestrator:cancel-all', async (_event, profileId: string) => {
+    rpaOrchestrator.cancelAllForProfile(profileId);
+  });
+
+  ipcMain.handle('rpa-orchestrator:get-queue', async (_event, profileId: string) => {
+    return rpaOrchestrator.getQueueForProfile(profileId);
+  });
+
+  ipcMain.handle('rpa-orchestrator:get-history', async (_event, profileId: string, limit?: number) => {
+    return rpaOrchestrator.getTaskHistory(profileId, limit);
+  });
+
+  ipcMain.handle('rpa-orchestrator:create-schedule', async (_event, profileId: string, scriptId: string, scheduleConfig: any) => {
+    return rpaOrchestrator.createSchedule(profileId, scriptId, scheduleConfig);
+  });
+
+  ipcMain.handle('rpa-orchestrator:cancel-schedule', async (_event, scheduleId: string) => {
+    rpaOrchestrator.cancelSchedule(scheduleId);
+  });
+
+  ipcMain.handle('rpa-orchestrator:get-schedules', async () => {
+    return rpaOrchestrator.getActiveSchedules();
+  });
+
+  ipcMain.handle('rpa-orchestrator:save-config', async (_event, profileId: string, config: any) => {
+    rpaOrchestrator.saveProfileConfig(profileId, config);
+  });
+
+  ipcMain.handle('rpa-orchestrator:get-config', async (_event, profileId: string) => {
+    return rpaOrchestrator.getProfileConfig(profileId);
+  });
+
+  ipcMain.handle('rpa-orchestrator:set-max-concurrency', async (_event, max: number) => {
+    rpaOrchestrator.setMaxConcurrency(max);
   });
 
   return { profileManager };

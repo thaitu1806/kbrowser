@@ -37,7 +37,7 @@ describe('Database Schema', () => {
     expect(result).toBe(1);
   });
 
-  it('should create all 10 required tables', () => {
+  it('should create all required tables', () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all() as { name: string }[];
@@ -47,13 +47,17 @@ describe('Database Schema', () => {
     expect(tableNames).toEqual([
       'action_logs',
       'extensions',
+      'groups',
       'profile_access',
       'profile_data',
       'profile_extensions',
+      'profile_rpa_config',
       'profiles',
       'proxies',
       'rotation_configs',
+      'rpa_schedules',
       'rpa_scripts',
+      'rpa_tasks',
       'users',
     ]);
   });
@@ -359,7 +363,7 @@ describe('Database Schema', () => {
       const tables = db2
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
         .all() as { name: string }[];
-      expect(tables.length).toBe(10);
+      expect(tables.length).toBe(14);
       db2.close();
     });
   });

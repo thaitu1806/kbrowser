@@ -69,5 +69,20 @@ export type {
   LogFilter,
 } from './logger';
 
+// RPA Orchestrator types
+export type {
+  TaskStatus,
+  ExecutionOrder,
+  TaskType,
+  ScheduleStatus,
+  RPATask,
+  RPASchedule,
+  ProfileRPAConfig,
+  BatchReport,
+  TaskProgressEvent,
+  BatchExecuteConfig,
+  ScheduleConfig,
+} from './rpa-orchestrator';
+
 // Error types
 export { AppErrorCode } from './errors';
