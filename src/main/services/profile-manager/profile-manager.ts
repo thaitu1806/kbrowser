@@ -244,33 +244,80 @@ export class ProfileManager {
       chromiumArgs.push('--enforce-webrtc-ip-permission-check');
     }
 
-    // Auto-detect Chromium version and fix User-Agent to match actual browser
-    // First, check if real Chrome is installed
-    const useRealChrome = false; // Use Playwright's bundled Chromium
+    // Auto-detect Chrome stable installation and use it instead of Playwright's Chromium
+    // Playwright's bundled Chromium is a dev/canary build — its TLS fingerprint, JS capabilities,
+    // and internal version differ from Chrome stable, causing BrowserScan "Detection" flags.
+    // Using real Chrome stable eliminates kernel/UA mismatch entirely.
+    let useRealChrome = false;
+    let detectedChromeVersion = '';
+
+    if (row.browser_type !== 'firefox') {
+      // Check if Chrome stable is installed on the system
+      const chromePaths = [
+        process.env['PROGRAMFILES'] ? path.join(process.env['PROGRAMFILES'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+        process.env['PROGRAMFILES(X86)'] ? path.join(process.env['PROGRAMFILES(X86)'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+        process.env['LOCALAPPDATA'] ? path.join(process.env['LOCALAPPDATA'], 'Google', 'Chrome', 'Application', 'chrome.exe') : '',
+      ].filter(Boolean);
+
+      for (const chromePath of chromePaths) {
+        if (fs.existsSync(chromePath)) {
+          useRealChrome = true;
+          // Try to read Chrome version from the version file next to chrome.exe
+          try {
+            const chromeDir = path.dirname(chromePath);
+            const versionDirs = fs.readdirSync(chromeDir).filter((d: string) => /^\d+\.\d+\.\d+\.\d+$/.test(d));
+            if (versionDirs.length > 0) {
+              // Sort to get the latest version
+              versionDirs.sort((a: string, b: string) => {
+                const pa = a.split('.').map(Number);
+                const pb = b.split('.').map(Number);
+                for (let i = 0; i < 4; i++) {
+                  if (pa[i] !== pb[i]) return pb[i] - pa[i];
+                }
+                return 0;
+              });
+              detectedChromeVersion = versionDirs[0];
+            }
+          } catch {
+            // Ignore version detection errors
+          }
+          console.log(`[Chrome] Found Chrome stable: ${chromePath} (version: ${detectedChromeVersion || 'unknown'})`);
+          break;
+        }
+      }
+
+      if (!useRealChrome) {
+        console.warn('[Chrome] Chrome stable not found, falling back to Playwright Chromium (may trigger BrowserScan detection)');
+      }
+    }
 
     let effectiveUserAgent = fpConfig?.userAgent || '';
     if (effectiveUserAgent && row.browser_type !== 'firefox') {
-      try {
-        // Read version from playwright-core's browsers.json
-        const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
-        const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
-        if (fs.existsSync(browsersJsonPath)) {
-          const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
-          const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
-          if (chromiumEntry?.browserVersion) {
-            // Playwright version is like 147.0.7727.15 (dev build)
-            // Chrome stable is like 147.0.7727.102
-            // Use same major.minor.build but replace patch with realistic stable number
-            const parts = chromiumEntry.browserVersion.split('.');
-            if (parts.length === 4) {
-              const stableVersion = `${parts[0]}.${parts[1]}.${parts[2]}.100`;
-              effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${stableVersion}`);
-              console.log(`[UA] Set Chrome stable version: ${stableVersion} (Playwright: ${chromiumEntry.browserVersion})`);
+      if (useRealChrome && detectedChromeVersion) {
+        // Use the real Chrome stable version — this matches the actual kernel perfectly
+        effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${detectedChromeVersion}`);
+        console.log(`[UA] Using real Chrome stable version: ${detectedChromeVersion}`);
+      } else {
+        // Fallback: read Playwright's Chromium version and approximate a stable version
+        try {
+          const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
+          const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
+          if (fs.existsSync(browsersJsonPath)) {
+            const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
+            const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
+            if (chromiumEntry?.browserVersion) {
+              const parts = chromiumEntry.browserVersion.split('.');
+              if (parts.length === 4) {
+                // Keep Playwright's exact version — don't fake a stable patch number
+                // This is still detectable but at least consistent with the kernel
+                effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${chromiumEntry.browserVersion}`);
+                console.log(`[UA] Using Playwright Chromium version: ${chromiumEntry.browserVersion} (may be detected as non-stable)`);
+              }
             }
           }
+        } catch {
+          console.warn('[UA] Could not auto-detect Chromium version, using configured UA');
         }
-      } catch {
-        console.warn('[UA] Could not auto-detect Chromium version, using configured UA');
       }
     }
 
@@ -338,7 +385,7 @@ export class ProfileManager {
 
     // Parse Chrome version for Client Hints
     const chromeVersionMatch = effectiveUserAgent.match(/Chrome\/([\d.]+)/);
-    const chromeFullVersion = chromeVersionMatch ? chromeVersionMatch[1] : '147.0.7727.100';
+    const chromeFullVersion = chromeVersionMatch ? chromeVersionMatch[1] : (detectedChromeVersion || '147.0.7727.100');
     const chromeMajorVersion = chromeFullVersion.split('.')[0];
 
     try {
