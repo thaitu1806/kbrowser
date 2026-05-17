@@ -541,6 +541,38 @@ export class ProfileManager {
                 delete window.__pw_manual;
                 delete window.__pwInitScripts;
 
+                // --- Anti-DevTools detection ---
+                // Pixelscan detects DevTools via outerWidth/innerWidth difference
+                // and console.log timing. CDP sessions can trigger false positives.
+                // Fix: ensure outerWidth/Height always equals innerWidth/Height + chrome
+                try {
+                  // Override outerWidth/outerHeight to prevent size-based detection
+                  Object.defineProperty(window, 'outerWidth', {
+                    get: function() { return window.innerWidth; },
+                    configurable: true
+                  });
+                  Object.defineProperty(window, 'outerHeight', {
+                    get: function() { return window.innerHeight + 85; }, // Normal chrome height
+                    configurable: true
+                  });
+                } catch(e) {}
+
+                // Neutralize Firebug/DevTools detection via console tricks
+                try {
+                  const originalConsole = window.console;
+                  const noop = function() {};
+                  // Override console.profiles (used by some detectors)
+                  if (originalConsole) {
+                    Object.defineProperty(originalConsole, 'profiles', {
+                      get: noop,
+                      configurable: true
+                    });
+                  }
+                } catch(e) {}
+
+                // Block debugger-based detection (some sites use debugger statement timing)
+                // This is handled by not having DevTools open — CDP alone shouldn't trigger it
+
                 // --- Spoof navigator.userAgentData (Client Hints) ---
                 if (navigator.userAgentData) {
                   const brands = [
