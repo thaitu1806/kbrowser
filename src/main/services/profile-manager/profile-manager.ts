@@ -410,6 +410,22 @@ export class ProfileManager {
       console.log(`[UA] Final effectiveUserAgent: ${effectiveUserAgent}`);
     }
 
+    // Derive platform metadata from fpConfig for consistent spoofing
+    // This maps the navigator.platform value to the correct Client Hints metadata
+    const cfgPlatform = fpConfig?.platform || 'Win32';
+    const isWindows = cfgPlatform === 'Win32' || cfgPlatform.includes('Win');
+    const isMac = cfgPlatform === 'MacIntel' || cfgPlatform.includes('Mac');
+    const isLinux = cfgPlatform === 'Linux' || cfgPlatform.includes('Linux');
+
+    // Client Hints platform name (different from navigator.platform)
+    const chPlatform = isMac ? 'macOS' : isLinux ? 'Linux' : 'Windows';
+    // Platform version for Client Hints
+    const chPlatformVersion = isMac ? '13.0.0' : isLinux ? '6.1.0' : '10.0.0';
+    // Architecture
+    const chArchitecture = isMac ? 'arm' : 'x86';
+    // Bitness
+    const chBitness = '64';
+
     // Apply the kernel-matched UA immediately via CDP on the first page
     try {
       const fixPage = context.pages()[0];
@@ -431,12 +447,12 @@ export class ProfileManager {
               { brand: 'Not-A.Brand', version: '24.0.0.0' },
             ],
             fullVersion: kernelChromeVersion,
-            platform: 'Windows',
-            platformVersion: '10.0.0',
-            architecture: 'x86',
+            platform: chPlatform,
+            platformVersion: chPlatformVersion,
+            architecture: chArchitecture,
             model: '',
             mobile: false,
-            bitness: '64',
+            bitness: chBitness,
             wow64: false,
           },
         });
@@ -459,13 +475,15 @@ export class ProfileManager {
     await context.route('**/*', (route) => {
       const headers = { ...route.request().headers() };
       headers['accept-language'] = acceptLangHeader;
-      // Override Sec-CH-UA headers to match kernel version
+      // Override Sec-CH-UA headers to match kernel version and platform
       if (headers['sec-ch-ua']) {
         headers['sec-ch-ua'] = secChUaHeader;
       }
       if (headers['sec-ch-ua-full-version-list']) {
         headers['sec-ch-ua-full-version-list'] = secChUaFullHeader;
       }
+      // Override Sec-CH-UA-Platform to match configured OS
+      headers['sec-ch-ua-platform'] = `"${chPlatform}"`;
       // Ensure User-Agent header matches
       if (effectiveUserAgent) {
         headers['user-agent'] = effectiveUserAgent;
@@ -572,6 +590,71 @@ export class ProfileManager {
           }
         } catch(e) {}
 
+        // === NAVIGATOR UA/PLATFORM OVERRIDE ===
+        // CRITICAL: CDP Emulation.setUserAgentOverride is session-scoped and only applies
+        // to the page the CDP session is attached to. For new tabs/pages, navigator.userAgent
+        // falls back to the REAL browser UA (Windows). We MUST override it in JS too.
+        try {
+          var SPOOF_UA = ${JSON.stringify(effectiveUserAgent)};
+          var SPOOF_PLATFORM = ${JSON.stringify(fpConfig?.platform || 'Win32')};
+          var SPOOF_APPVERSION = ${JSON.stringify(fpConfig?.appVersion || '5.0 (Windows NT 10.0; Win64; x64)')};
+          var SPOOF_OSCPU = ${JSON.stringify(fpConfig?.oscpu || '')};
+
+          var uaDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
+          if (uaDesc && uaDesc.get) {
+            Object.defineProperty(Navigator.prototype, 'userAgent', {
+              get: new Proxy(uaDesc.get, {
+                apply: function() { return SPOOF_UA; }
+              }),
+              configurable: true, enumerable: true
+            });
+          } else {
+            Object.defineProperty(Navigator.prototype, 'userAgent', {
+              get: function() { return SPOOF_UA; },
+              configurable: true, enumerable: true
+            });
+          }
+
+          var platDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'platform');
+          if (platDesc && platDesc.get) {
+            Object.defineProperty(Navigator.prototype, 'platform', {
+              get: new Proxy(platDesc.get, {
+                apply: function() { return SPOOF_PLATFORM; }
+              }),
+              configurable: true, enumerable: true
+            });
+          } else {
+            Object.defineProperty(Navigator.prototype, 'platform', {
+              get: function() { return SPOOF_PLATFORM; },
+              configurable: true, enumerable: true
+            });
+          }
+
+          var avDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'appVersion');
+          if (avDesc && avDesc.get) {
+            Object.defineProperty(Navigator.prototype, 'appVersion', {
+              get: new Proxy(avDesc.get, {
+                apply: function() { return SPOOF_APPVERSION; }
+              }),
+              configurable: true, enumerable: true
+            });
+          } else {
+            Object.defineProperty(Navigator.prototype, 'appVersion', {
+              get: function() { return SPOOF_APPVERSION; },
+              configurable: true, enumerable: true
+            });
+          }
+
+          // Only define oscpu on Firefox — Chromium does NOT have this property.
+          // Adding it on Chromium is detectable by Pixelscan as an anomaly.
+          if (SPOOF_OSCPU && ${JSON.stringify(row.browser_type === 'firefox')}) {
+            Object.defineProperty(Navigator.prototype, 'oscpu', {
+              get: function() { return SPOOF_OSCPU; },
+              configurable: true, enumerable: true
+            });
+          }
+        } catch(e) {}
+
         // === ANTI-CDP/DEVTOOLS DETECTION (IsDevtoolOpen) ===
         // Neutralize Runtime.consoleAPICalled detection via console Proxy
         try {
@@ -598,18 +681,16 @@ export class ProfileManager {
         } catch(e) {}
 
         // === SCREEN PROPERTIES ===
-        // Screen resolution MUST be >= window size, otherwise sites detect spoofing.
-        // Strategy: Use configured screen size but ensure it's >= actual window dimensions.
-        // Also make availWidth/availHeight consistent (availHeight = height - taskbar).
+        // Always use the configured screen size — this is what we want to report.
+        // The window is launched with --window-size matching this config, so there
+        // should be no mismatch. Using Math.max() previously caused the REAL screen
+        // size to leak through when the real screen was larger than the config.
         var cfgScreenW = ${screenW2};
         var cfgScreenH = ${screenH2};
         var cfgColorDepth = ${colorDepth2};
-        // Use the larger of configured vs actual window size
-        var actualScreenW = Math.max(cfgScreenW, window.outerWidth || window.innerWidth || cfgScreenW);
-        var actualScreenH = Math.max(cfgScreenH, window.outerHeight || window.innerHeight || cfgScreenH);
         var screenProps = {
-          width: actualScreenW, height: actualScreenH,
-          availWidth: actualScreenW, availHeight: actualScreenH - 40,
+          width: cfgScreenW, height: cfgScreenH,
+          availWidth: cfgScreenW, availHeight: cfgScreenH - 40,
           colorDepth: cfgColorDepth, pixelDepth: cfgColorDepth
         };
         Object.keys(screenProps).forEach(function(prop) {
@@ -634,11 +715,11 @@ export class ProfileManager {
         // These must be <= screen.width/height
         try {
           Object.defineProperty(window, 'outerWidth', {
-            get: function() { return Math.min(window.innerWidth, actualScreenW); },
+            get: function() { return Math.min(window.innerWidth, cfgScreenW); },
             configurable: true
           });
           Object.defineProperty(window, 'outerHeight', {
-            get: function() { return Math.min(window.innerHeight + 85, actualScreenH); },
+            get: function() { return Math.min(window.innerHeight + 85, cfgScreenH); },
             configurable: true
           });
         } catch(e) {}
@@ -681,41 +762,69 @@ export class ProfileManager {
         } catch(e) {}
 
         // === NAVIGATOR.USERAGENTDATA (Client Hints) ===
+        // Strategy: Patch the EXISTING NavigatorUAData instance's properties
+        // instead of replacing with a plain object. This preserves:
+        // - Correct prototype chain (NavigatorUAData.prototype)
+        // - Symbol.toStringTag → "[object NavigatorUAData]"
+        // - instanceof checks
+        // Sites detect spoofing by checking Object.getPrototypeOf(navigator.userAgentData)
         try {
           if (navigator.userAgentData) {
-            var brands = [
-              { brand: 'Google Chrome', version: '${chromeMajorVersion}' },
-              { brand: 'Chromium', version: '${chromeMajorVersion}' },
-              { brand: 'Not-A.Brand', version: '24' },
-            ];
-            Object.defineProperty(navigator, 'userAgentData', {
-              value: {
-                brands: brands,
-                mobile: false,
-                platform: 'Windows',
-                getHighEntropyValues: function(hints) {
-                  return Promise.resolve({
-                    brands: brands,
-                    mobile: false,
-                    platform: 'Windows',
-                    platformVersion: '10.0.0',
-                    architecture: 'x86',
-                    bitness: '64',
-                    model: '',
-                    uaFullVersion: '${chromeFullVersion}',
-                    fullVersionList: [
-                      { brand: 'Google Chrome', version: '${chromeFullVersion}' },
-                      { brand: 'Chromium', version: '${chromeFullVersion}' },
-                      { brand: 'Not-A.Brand', version: '24.0.0.0' },
-                    ],
-                    wow64: false,
-                  });
-                },
-                toJSON: function() {
-                  return { brands: brands, mobile: false, platform: 'Windows' };
-                }
+            var uaData = navigator.userAgentData;
+            var spoofedBrands = Object.freeze([
+              Object.freeze({ brand: 'Google Chrome', version: '${chromeMajorVersion}' }),
+              Object.freeze({ brand: 'Chromium', version: '${chromeMajorVersion}' }),
+              Object.freeze({ brand: 'Not-A.Brand', version: '24' }),
+            ]);
+
+            // Override 'brands' getter on the instance
+            Object.defineProperty(uaData, 'brands', {
+              get: function() { return spoofedBrands; },
+              configurable: true, enumerable: true
+            });
+
+            // Override 'mobile' getter on the instance
+            Object.defineProperty(uaData, 'mobile', {
+              get: function() { return false; },
+              configurable: true, enumerable: true
+            });
+
+            // Override 'platform' getter on the instance
+            Object.defineProperty(uaData, 'platform', {
+              get: function() { return '${chPlatform}'; },
+              configurable: true, enumerable: true
+            });
+
+            // Override getHighEntropyValues — must return a Promise like the native one
+            var origGetHEV = uaData.getHighEntropyValues;
+            Object.defineProperty(uaData, 'getHighEntropyValues', {
+              value: function getHighEntropyValues(hints) {
+                return Promise.resolve({
+                  brands: spoofedBrands,
+                  mobile: false,
+                  platform: '${chPlatform}',
+                  platformVersion: '${chPlatformVersion}',
+                  architecture: '${chArchitecture}',
+                  bitness: '${chBitness}',
+                  model: '',
+                  uaFullVersion: '${chromeFullVersion}',
+                  fullVersionList: [
+                    { brand: 'Google Chrome', version: '${chromeFullVersion}' },
+                    { brand: 'Chromium', version: '${chromeFullVersion}' },
+                    { brand: 'Not-A.Brand', version: '24.0.0.0' },
+                  ],
+                  wow64: false,
+                });
               },
-              configurable: true, enumerable: true, writable: false,
+              writable: true, configurable: true, enumerable: true
+            });
+
+            // Override toJSON to match native behavior
+            Object.defineProperty(uaData, 'toJSON', {
+              value: function toJSON() {
+                return { brands: spoofedBrands, mobile: false, platform: '${chPlatform}' };
+              },
+              writable: true, configurable: true, enumerable: true
             });
           }
         } catch(e) {}
@@ -771,12 +880,12 @@ export class ProfileManager {
             { brand: 'Not-A.Brand', version: '24.0.0.0' },
           ],
           fullVersion: chromeFullVersion,
-          platform: 'Windows',
-          platformVersion: '10.0.0',
-          architecture: 'x86',
+          platform: chPlatform,
+          platformVersion: chPlatformVersion,
+          architecture: chArchitecture,
           model: '',
           mobile: false,
-          bitness: '64',
+          bitness: chBitness,
           wow64: false,
         },
       });
@@ -788,6 +897,24 @@ export class ProfileManager {
         });
       } catch {
         // Older Chromium versions may not support this
+      }
+
+      // CRITICAL: Override screen metrics at engine level via CDP
+      // This is the most reliable way — it controls what screen.width/height/availWidth/availHeight
+      // return at the Blink engine level, before any JS runs.
+      // This was present in the working version (ee782166) and its removal caused the regression.
+      try {
+        await cdp.send('Emulation.setDeviceMetricsOverride', {
+          width: screenW2,
+          height: screenH2,
+          deviceScaleFactor: 1,
+          mobile: false,
+          screenWidth: screenW2,
+          screenHeight: screenH2,
+          screenOrientation: { type: 'landscapePrimary', angle: 0 },
+        });
+      } catch {
+        // Fallback: JS injection handles it
       }
 
       // CRITICAL: Disable automation flag at engine level

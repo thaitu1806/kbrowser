@@ -703,7 +703,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           webrtc: form.webrtc === 'disabled' ? 'disable' as const : form.webrtc === 'forward' ? 'proxy' as const : 'real' as const,
           platform: form.os === 'windows' ? 'Win32' : form.os === 'macos' ? 'MacIntel' : 'Linux',
           appVersion: form.userAgent.replace('Mozilla/', ''),
-          oscpu: form.os === 'windows' ? 'Windows NT 10.0; Win64; x64' : form.os === 'macos' ? 'Intel Mac OS X 10.15' : 'Linux x86_64',
+          oscpu: form.browser === 'firefox' ? (form.os === 'windows' ? 'Windows NT 10.0; Win64; x64' : form.os === 'macos' ? 'Intel Mac OS X 10.15' : 'Linux x86_64') : '',
           screen: { width: screenWidth, height: screenHeight, colorDepth: 24 },
         },
         proxy: form.proxyType !== 'none' ? {

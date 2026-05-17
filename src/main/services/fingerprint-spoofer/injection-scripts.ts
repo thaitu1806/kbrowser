@@ -274,11 +274,15 @@ export function generateUserAgentScript(
     enumerable: true
   });
 
-  Object.defineProperty(navigator, 'oscpu', {
-    get: function() { return OSCPU; },
-    configurable: true,
-    enumerable: true
-  });
+  // Only define oscpu if provided — Chromium does NOT have this property natively.
+  // Defining it on Chromium is detectable by bot detection tools (Pixelscan).
+  if (OSCPU) {
+    Object.defineProperty(navigator, 'oscpu', {
+      get: function() { return OSCPU; },
+      configurable: true,
+      enumerable: true
+    });
+  }
 })();`;
 }
 
