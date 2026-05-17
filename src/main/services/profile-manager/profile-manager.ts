@@ -449,8 +449,10 @@ export class ProfileManager {
     // Anti-bot detection strategy:
     // CRITICAL: Minimize CDP session usage to avoid Runtime.Enable detection (IsDevtoolOpen).
     // Pixelscan/Cloudflare detect CDP via Runtime.consoleAPICalled side-effect.
-    // Strategy: Use CDP ONCE on first page for Emulation overrides + Page.addScriptToEvaluateOnNewDocument,
-    // then DETACH immediately. Use context.addInitScript() for everything else.
+    // Strategy:
+    // 1. Use CDP ONCE for Page.addScriptToEvaluateOnNewDocument (persists after detach)
+    // 2. Use CDP for Emulation.setUserAgentOverride (session-scoped, keep session alive but disable Runtime)
+    // 3. Use context.addInitScript() as backup
     const screenW2 = fpConfig?.screen?.width || 1920;
     const screenH2 = fpConfig?.screen?.height || 1080;
     const colorDepth2 = fpConfig?.screen?.colorDepth || 24;
@@ -461,106 +463,98 @@ export class ProfileManager {
     const chromeFullVersion = kernelChromeVersion || '148.0.0.0';
     const chromeMajorVersion = chromeFullVersion.split('.')[0];
 
-    try {
-      // Use CDP session on first page ONLY — then detach to avoid Runtime.Enable leak
-      const firstPage = context.pages()[0] || await context.newPage();
-      const cdp = await context.newCDPSession(firstPage);
-
-      // Override User-Agent AND Client Hints at engine level via CDP
-      await cdp.send('Emulation.setUserAgentOverride', {
-        userAgent: effectiveUserAgent,
-        platform: fpConfig?.platform || 'Win32',
-        userAgentMetadata: {
-          brands: [
-            { brand: 'Google Chrome', version: chromeMajorVersion },
-            { brand: 'Chromium', version: chromeMajorVersion },
-            { brand: 'Not-A.Brand', version: '24' },
-          ],
-          fullVersionList: [
-            { brand: 'Google Chrome', version: chromeFullVersion },
-            { brand: 'Chromium', version: chromeFullVersion },
-            { brand: 'Not-A.Brand', version: '24.0.0.0' },
-          ],
-          fullVersion: chromeFullVersion,
-          platform: 'Windows',
-          platformVersion: '10.0.0',
-          architecture: 'x86',
-          model: '',
-          mobile: false,
-          bitness: '64',
-          wow64: false,
-        },
-      });
-
-      // Override hardware concurrency at engine level
-      try {
-        await cdp.send('Emulation.setHardwareConcurrencyOverride', {
-          hardwareConcurrency: cpuCores,
-        });
-      } catch {
-        // Older Chromium versions may not support this
-      }
-
-      // Disable Runtime domain to prevent consoleAPICalled leak
-      // This is the KEY fix for IsDevtoolOpen detection
-      try {
-        await cdp.send('Runtime.disable');
-      } catch {
-        // May not be enabled yet
-      }
-
-      // DETACH CDP session immediately to prevent Runtime.Enable leak
-      // Page.addScriptToEvaluateOnNewDocument persists even after detach
-      // But Emulation overrides are session-scoped — they will be lost.
-      // So we DON'T detach here, but we DO disable Runtime domain above.
-      // The trade-off: keep CDP for Emulation but disable Runtime to avoid detection.
-
-      console.log('[CDP] Applied Emulation overrides, Runtime.disable sent');
-    } catch {
-      // CDP not available (e.g., Firefox)
-      console.warn('[Spoof] CDP not available, falling back to addInitScript only');
-    }
-
-    // Use context.addInitScript() for ALL JS-level spoofing
-    // This does NOT trigger Runtime.Enable — it's injected at browser level
-    await context.addInitScript(`
+    // The MAIN anti-detection script — injected via CDP to run BEFORE any page JS
+    // This is critical because Playwright sets navigator.webdriver=true at engine level
+    // and addInitScript runs AFTER that. CDP Page.addScriptToEvaluateOnNewDocument runs BEFORE.
+    const antiDetectionScript = `
       (function() {
         'use strict';
 
-        // --- ANTI-CDP/DEVTOOLS DETECTION (IsDevtoolOpen) ---
-        // This MUST run before any other code on the page.
-        // Neutralize Runtime.consoleAPICalled detection:
-        // When Runtime.Enable is active, console.log triggers consoleAPICalled event
-        // which serializes arguments (calling getters). Sites exploit this.
-
-        // Replace console with a Proxy that prevents getter-based detection
+        // === WEBDRIVER FIX (MUST be first) ===
+        // Playwright/Chromium sets navigator.webdriver=true via the Blink automation flag.
+        // We wrap the existing getter with a Proxy to return false without changing descriptor shape.
         try {
-          const origConsole = console;
-          const nativeToString = Function.prototype.toString;
+          var wdDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+          if (wdDesc && wdDesc.get) {
+            Object.defineProperty(Navigator.prototype, 'webdriver', {
+              get: new Proxy(wdDesc.get, {
+                apply: function() { return false; }
+              }),
+              set: undefined,
+              configurable: true,
+              enumerable: true
+            });
+          } else {
+            // Fallback: define as accessor
+            Object.defineProperty(Navigator.prototype, 'webdriver', {
+              get: function() { return false; },
+              configurable: true, enumerable: true
+            });
+          }
+        } catch(e) {}
+        // Also override on the instance
+        try {
+          Object.defineProperty(navigator, 'webdriver', {
+            get: function() { return false; },
+            configurable: true, enumerable: true
+          });
+        } catch(e) {}
 
-          // Create a handler that intercepts console method calls
-          const handler = {
-            get(target, prop, receiver) {
+        // === HARDWARE CONCURRENCY ===
+        // Use Proxy on the existing getter to avoid descriptor detection
+        try {
+          var hcDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'hardwareConcurrency');
+          if (hcDesc && hcDesc.get) {
+            Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
+              get: new Proxy(hcDesc.get, {
+                apply: function() { return ${cpuCores}; }
+              }),
+              configurable: true, enumerable: true
+            });
+          } else {
+            Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
+              get: function() { return ${cpuCores}; },
+              configurable: true, enumerable: true
+            });
+          }
+        } catch(e) {}
+
+        // === DEVICE MEMORY ===
+        // Use Proxy on the existing getter to avoid descriptor detection
+        try {
+          var dmDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory');
+          if (dmDesc && dmDesc.get) {
+            Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+              get: new Proxy(dmDesc.get, {
+                apply: function() { return ${ramGB}; }
+              }),
+              configurable: true, enumerable: true
+            });
+          } else {
+            Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+              get: function() { return ${ramGB}; },
+              configurable: true, enumerable: true
+            });
+          }
+        } catch(e) {}
+
+        // === ANTI-CDP/DEVTOOLS DETECTION (IsDevtoolOpen) ===
+        // Neutralize Runtime.consoleAPICalled detection via console Proxy
+        try {
+          var origConsole = console;
+          var nativeToString = Function.prototype.toString;
+          var handler = {
+            get: function(target, prop, receiver) {
               if (prop === Symbol.toStringTag) return 'console';
-              const val = Reflect.get(target, prop, receiver);
+              if (prop === 'profiles') return undefined;
+              var val = target[prop];
               if (typeof val === 'function') {
-                // Wrap console methods to prevent argument serialization leak
-                const wrapped = function() {
-                  // Don't pass objects with getters — just pass primitives
-                  const safeArgs = [];
-                  for (let i = 0; i < arguments.length; i++) {
-                    const arg = arguments[i];
-                    if (arg === null || arg === undefined || typeof arg !== 'object') {
-                      safeArgs.push(arg);
-                    } else {
-                      // For objects, pass a frozen shallow copy to prevent getter calls
-                      try { safeArgs.push(String(arg)); } catch(e) { safeArgs.push('[object]'); }
-                    }
-                  }
-                  return val.apply(target, safeArgs);
+                var wrapped = function() {
+                  return val.apply(target, arguments);
                 };
-                // Make toString look native
                 wrapped.toString = function() { return nativeToString.call(val); };
+                Object.defineProperty(wrapped, 'length', { value: val.length });
+                Object.defineProperty(wrapped, 'name', { value: val.name || prop });
                 return wrapped;
               }
               return val;
@@ -569,31 +563,7 @@ export class ProfileManager {
           window.console = new Proxy(origConsole, handler);
         } catch(e) {}
 
-        // --- webdriver: make it undefined ---
-        try {
-          Object.defineProperty(Navigator.prototype, 'webdriver', {
-            get: function() { return undefined; },
-            configurable: true, enumerable: true
-          });
-        } catch(e) {}
-
-        // --- hardwareConcurrency ---
-        try {
-          Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
-            get: function() { return ${cpuCores}; },
-            configurable: true, enumerable: true
-          });
-        } catch(e) {}
-
-        // --- deviceMemory ---
-        try {
-          Object.defineProperty(Navigator.prototype, 'deviceMemory', {
-            get: function() { return ${ramGB}; },
-            configurable: true, enumerable: true
-          });
-        } catch(e) {}
-
-        // --- Screen properties ---
+        // === SCREEN PROPERTIES ===
         var screenProps = {
           width: ${screenW2}, height: ${screenH2},
           availWidth: ${screenW2}, availHeight: ${screenH2 - 40},
@@ -615,7 +585,7 @@ export class ProfileManager {
           } catch(e) {}
         });
 
-        // --- outerWidth/outerHeight (DevTools size detection) ---
+        // === OUTER WIDTH/HEIGHT (DevTools size detection) ===
         try {
           Object.defineProperty(window, 'outerWidth', {
             get: function() { return window.innerWidth; },
@@ -627,14 +597,14 @@ export class ProfileManager {
           });
         } catch(e) {}
 
-        // --- Clean Playwright artifacts ---
+        // === CLEAN PLAYWRIGHT ARTIFACTS ===
         try {
           delete window.__playwright;
           delete window.__pw_manual;
           delete window.__pwInitScripts;
         } catch(e) {}
 
-        // --- Ensure chrome.runtime exists (real Chrome always has this) ---
+        // === CHROME RUNTIME (real Chrome always has this) ===
         try {
           if (!window.chrome) window.chrome = {};
           if (!window.chrome.runtime) {
@@ -645,22 +615,26 @@ export class ProfileManager {
           }
         } catch(e) {}
 
-        // --- Neutralize debugger-based timing detection ---
+        // === DEBUGGER TIMING NEUTRALIZATION ===
+        // Intercept Function constructor to strip debugger statements
         try {
-          var origFunction = Function;
-          window.Function = function() {
+          var OrigFunc = Function;
+          var NewFunc = function() {
             var args = Array.prototype.slice.call(arguments);
             if (args.length > 0 && typeof args[args.length - 1] === 'string') {
-              args[args.length - 1] = args[args.length - 1].replace(/\\bdebugger\\b/g, '');
+              args[args.length - 1] = args[args.length - 1].replace(/debugger/g, '');
             }
-            return origFunction.apply(this, args);
+            return OrigFunc.apply(this, args);
           };
-          window.Function.prototype = origFunction.prototype;
-          window.Function.prototype.constructor = window.Function;
-          window.Function.toString = function() { return 'function Function() { [native code] }'; };
+          NewFunc.prototype = OrigFunc.prototype;
+          Object.defineProperty(NewFunc, 'name', { value: 'Function', configurable: true });
+          NewFunc.toString = function() { return 'function Function() { [native code] }'; };
+          // Don't override window.Function — it can be detected
+          // Instead, just patch the prototype constructor
+          Function.prototype.constructor = NewFunc;
         } catch(e) {}
 
-        // --- Spoof navigator.userAgentData (Client Hints) ---
+        // === NAVIGATOR.USERAGENTDATA (Client Hints) ===
         try {
           if (navigator.userAgentData) {
             var brands = [
@@ -700,7 +674,7 @@ export class ProfileManager {
           }
         } catch(e) {}
 
-        // --- Fix permissions.query for notifications ---
+        // === PERMISSIONS QUERY FIX ===
         try {
           if (navigator.permissions && navigator.permissions.query) {
             var origQuery = navigator.permissions.query.bind(navigator.permissions);
@@ -713,7 +687,76 @@ export class ProfileManager {
           }
         } catch(e) {}
       })();
-    `);
+    `;
+
+    try {
+      // Use CDP on first page for:
+      // 1. Page.addScriptToEvaluateOnNewDocument — persists after detach, runs BEFORE page JS
+      // 2. Emulation.setUserAgentOverride — controls HTTP headers (session-scoped)
+      // 3. Runtime.disable — prevent consoleAPICalled leak
+      const firstPage = context.pages()[0] || await context.newPage();
+      const cdp = await context.newCDPSession(firstPage);
+
+      // FIRST: Disable Runtime domain to prevent consoleAPICalled leak
+      try {
+        await cdp.send('Runtime.disable');
+      } catch {
+        // May not be enabled yet
+      }
+
+      // Inject anti-detection script via CDP (runs before ANY page JS, including webdriver check)
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: antiDetectionScript,
+      });
+
+      // Override User-Agent AND Client Hints at engine level
+      await cdp.send('Emulation.setUserAgentOverride', {
+        userAgent: effectiveUserAgent,
+        platform: fpConfig?.platform || 'Win32',
+        userAgentMetadata: {
+          brands: [
+            { brand: 'Google Chrome', version: chromeMajorVersion },
+            { brand: 'Chromium', version: chromeMajorVersion },
+            { brand: 'Not-A.Brand', version: '24' },
+          ],
+          fullVersionList: [
+            { brand: 'Google Chrome', version: chromeFullVersion },
+            { brand: 'Chromium', version: chromeFullVersion },
+            { brand: 'Not-A.Brand', version: '24.0.0.0' },
+          ],
+          fullVersion: chromeFullVersion,
+          platform: 'Windows',
+          platformVersion: '10.0.0',
+          architecture: 'x86',
+          model: '',
+          mobile: false,
+          bitness: '64',
+          wow64: false,
+        },
+      });
+
+      // Override hardware concurrency at engine level
+      try {
+        await cdp.send('Emulation.setHardwareConcurrencyOverride', {
+          hardwareConcurrency: cpuCores,
+        });
+      } catch {
+        // Older Chromium versions may not support this
+      }
+
+      console.log('[CDP] Injected anti-detection script + Emulation overrides, Runtime disabled');
+
+      // NOTE: We keep the CDP session alive (don't detach) because:
+      // - Emulation.setUserAgentOverride is session-scoped (lost on detach)
+      // - Runtime.disable prevents the consoleAPICalled leak
+      // - Page.addScriptToEvaluateOnNewDocument persists regardless
+    } catch {
+      console.warn('[Spoof] CDP not available, falling back to addInitScript only');
+    }
+
+    // ALSO inject via addInitScript as backup (for new pages/tabs)
+    // addInitScript applies to ALL pages in the context
+    await context.addInitScript(antiDetectionScript);
 
     // Restore saved cookies from database
     try {
