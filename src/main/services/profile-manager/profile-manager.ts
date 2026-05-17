@@ -497,33 +497,40 @@ export class ProfileManager {
 
         // === WEBDRIVER FIX (MUST be first) ===
         // Playwright/Chromium sets navigator.webdriver=true via the Blink automation flag.
-        // We wrap the existing getter with a Proxy to return false without changing descriptor shape.
+        // Detection sites check:
+        // 1. Value (true = automation)
+        // 2. Own property on instance (should only be on prototype)
+        // 3. Getter toString (should look native)
+        // Fix: Delete own property, redefine on prototype with native-looking getter
         try {
+          // Remove any own property on the navigator instance first
+          delete navigator.webdriver;
+        } catch(e) {}
+        try {
+          // Get the original getter from prototype
           var wdDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
           if (wdDesc && wdDesc.get) {
+            // Wrap with Proxy — Proxy is undetectable per ES6 spec
+            var newGetter = new Proxy(wdDesc.get, {
+              apply: function(target, thisArg, args) { return false; }
+            });
             Object.defineProperty(Navigator.prototype, 'webdriver', {
-              get: new Proxy(wdDesc.get, {
-                apply: function() { return false; }
-              }),
-              set: undefined,
+              get: newGetter,
+              set: wdDesc.set,
               configurable: true,
               enumerable: true
             });
           } else {
-            // Fallback: define as accessor
+            // No getter exists — define one that returns false
             Object.defineProperty(Navigator.prototype, 'webdriver', {
-              get: function() { return false; },
-              configurable: true, enumerable: true
+              get: function webdriver() { return false; },
+              set: undefined,
+              configurable: true,
+              enumerable: true
             });
           }
         } catch(e) {}
-        // Also override on the instance
-        try {
-          Object.defineProperty(navigator, 'webdriver', {
-            get: function() { return false; },
-            configurable: true, enumerable: true
-          });
-        } catch(e) {}
+        // Do NOT set own property on navigator instance — that's detectable
 
         // === HARDWARE CONCURRENCY ===
         // Use Proxy on the existing getter to avoid descriptor detection
@@ -767,6 +774,21 @@ export class ProfileManager {
         });
       } catch {
         // Older Chromium versions may not support this
+      }
+
+      // CRITICAL: Disable automation flag at engine level
+      // This makes navigator.webdriver return false natively (no JS override needed)
+      try {
+        await (cdp as any).send('Emulation.setAutomationOverride', { enabled: false });
+      } catch {
+        // Not supported in all Chromium versions — JS fallback handles it
+      }
+
+      // Also try Page.setBypassCSP to allow our scripts to modify protected properties
+      try {
+        await cdp.send('Page.setBypassCSP', { enabled: true });
+      } catch {
+        // Not critical
       }
 
       console.log('[CDP] Injected anti-detection script + Emulation overrides, Runtime disabled');
