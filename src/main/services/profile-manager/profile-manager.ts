@@ -352,6 +352,31 @@ export class ProfileManager {
     // Launch persistent browser context with isolated user data dir
     const context = await browserType.launchPersistentContext(profileDir, launchOptions);
 
+    // CRITICAL: Monkey-patch context to auto-disable Runtime after each enable
+    // This prevents Runtime.consoleAPICalled leak that Pixelscan detects as IsDevtoolOpen.
+    // Playwright internally calls Runtime.enable on every new page/frame — we can't prevent that,
+    // but we CAN immediately disable it after the execution contexts are captured.
+    try {
+      const origNewCDPSession = context.newCDPSession.bind(context);
+      (context as unknown as { newCDPSession: typeof context.newCDPSession }).newCDPSession = async function(page: import('playwright').Page) {
+        const session = await origNewCDPSession(page);
+        const origSend = session.send.bind(session);
+        (session as unknown as { send: typeof session.send }).send = function(method: string, params?: Record<string, unknown>) {
+          const result = origSend(method, params);
+          if (method === 'Runtime.enable') {
+            // Immediately disable Runtime to prevent consoleAPICalled leak
+            (result as Promise<unknown>).then(() => {
+              origSend('Runtime.disable', {}).catch(() => {});
+            }).catch(() => {});
+          }
+          return result;
+        } as typeof session.send;
+        return session;
+      };
+    } catch {
+      // If monkey-patching fails, continue without it
+    }
+
     // CRITICAL: Get the REAL browser kernel version after launch.
     // BrowserScan detects version by testing JS/CSS features — we MUST match the real kernel.
     // Strategy: Read the browser's native UA, extract the real Chrome version,
