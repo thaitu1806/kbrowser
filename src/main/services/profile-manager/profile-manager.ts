@@ -361,16 +361,16 @@ export class ProfileManager {
       (context as unknown as { newCDPSession: typeof context.newCDPSession }).newCDPSession = async function(page: import('playwright').Page) {
         const session = await origNewCDPSession(page);
         const origSend = session.send.bind(session);
-        (session as unknown as { send: typeof session.send }).send = function(method: string, params?: Record<string, unknown>) {
-          const result = origSend(method, params);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (session as any).send = function(method: string, params?: unknown) {
+          const result = (origSend as any)(method, params);
           if (method === 'Runtime.enable') {
-            // Immediately disable Runtime to prevent consoleAPICalled leak
             (result as Promise<unknown>).then(() => {
-              origSend('Runtime.disable', {}).catch(() => {});
+              (origSend as any)('Runtime.disable', {}).catch(() => {});
             }).catch(() => {});
           }
           return result;
-        } as typeof session.send;
+        };
         return session;
       };
     } catch {
