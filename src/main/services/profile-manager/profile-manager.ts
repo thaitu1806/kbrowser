@@ -295,31 +295,32 @@ export class ProfileManager {
 
     let effectiveUserAgent = fpConfig?.userAgent || '';
     if (effectiveUserAgent && row.browser_type !== 'firefox') {
-      if (useRealChrome && detectedChromeVersion) {
-        // Use the real Chrome stable version — this matches the actual kernel perfectly
+      // Always read Playwright's actual Chromium version first as the ground truth
+      // This is the kernel that will actually run, regardless of executablePath
+      let playwrightChromiumVersion = '';
+      try {
+        const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
+        const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
+        if (fs.existsSync(browsersJsonPath)) {
+          const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
+          const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
+          if (chromiumEntry?.browserVersion) {
+            playwrightChromiumVersion = chromiumEntry.browserVersion;
+          }
+        }
+      } catch {
+        // Ignore
+      }
+
+      if (useRealChrome && detectedChromePath && detectedChromeVersion) {
+        // When using real Chrome via executablePath, set UA to match Chrome's version
         effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${detectedChromeVersion}`);
         console.log(`[UA] Using real Chrome stable version: ${detectedChromeVersion}`);
-      } else {
-        // Fallback: read Playwright's Chromium version and approximate a stable version
-        try {
-          const pwCorePath = path.dirname(require.resolve('playwright-core/package.json'));
-          const browsersJsonPath = path.join(pwCorePath, 'browsers.json');
-          if (fs.existsSync(browsersJsonPath)) {
-            const browsersJson = JSON.parse(fs.readFileSync(browsersJsonPath, 'utf-8'));
-            const chromiumEntry = browsersJson.browsers?.find((b: { name: string }) => b.name === 'chromium');
-            if (chromiumEntry?.browserVersion) {
-              const parts = chromiumEntry.browserVersion.split('.');
-              if (parts.length === 4) {
-                // Keep Playwright's exact version — don't fake a stable patch number
-                // This is still detectable but at least consistent with the kernel
-                effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${chromiumEntry.browserVersion}`);
-                console.log(`[UA] Using Playwright Chromium version: ${chromiumEntry.browserVersion} (may be detected as non-stable)`);
-              }
-            }
-          }
-        } catch {
-          console.warn('[UA] Could not auto-detect Chromium version, using configured UA');
-        }
+      } else if (playwrightChromiumVersion) {
+        // Using Playwright's bundled Chromium — UA MUST match its exact version
+        // to avoid kernel/UA mismatch detection on BrowserScan
+        effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${playwrightChromiumVersion}`);
+        console.log(`[UA] Using Playwright Chromium version: ${playwrightChromiumVersion}`);
       }
     }
 
@@ -361,8 +362,30 @@ export class ProfileManager {
       },
     };
 
+    // Log launch config for debugging kernel/UA mismatch
+    console.log(`[Launch] executablePath: ${(launchOptions as Record<string, unknown>).executablePath || 'Playwright default'}`);
+    console.log(`[Launch] useRealChrome: ${useRealChrome}, detectedChromePath: ${detectedChromePath || 'none'}`);
+
     // Launch persistent browser context with isolated user data dir
     const context = await browserType.launchPersistentContext(profileDir, launchOptions);
+
+    // Verify actual browser version after launch — fix UA if mismatch detected
+    try {
+      const firstPage = context.pages()[0] || await context.newPage();
+      const actualUA = await firstPage.evaluate('navigator.userAgent') as string;
+      const actualVersionMatch = actualUA.match(/Chrome\/([\d.]+)/);
+      if (actualVersionMatch && effectiveUserAgent) {
+        const actualVersion = actualVersionMatch[1];
+        const claimedMatch = effectiveUserAgent.match(/Chrome\/([\d.]+)/);
+        if (claimedMatch && claimedMatch[1] !== actualVersion) {
+          console.warn(`[UA] Mismatch detected! Claimed: Chrome/${claimedMatch[1]}, Actual kernel: Chrome/${actualVersion}. Fixing UA to match kernel.`);
+          effectiveUserAgent = effectiveUserAgent.replace(/Chrome\/[\d.]+/, `Chrome/${actualVersion}`);
+          // Re-apply the corrected UA via CDP on all pages
+        }
+      }
+    } catch {
+      // Ignore — page might not be ready
+    }
 
     // Force correct Accept-Language header on ALL requests via route interception
     const acceptLangHeader = fpConfig?.locale
