@@ -666,6 +666,29 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         }
       }
 
+      // Resolve screen resolution from form settings
+      let screenWidth = 1920;
+      let screenHeight = 1080;
+      if (form.screenResolutionMode === 'custom') {
+        screenWidth = parseInt(form.customWidth) || 1920;
+        screenHeight = parseInt(form.customHeight) || 1080;
+      } else if (form.screenResolutionMode === 'predefined' && form.screenResolutionValue !== 'Based on User-Agent') {
+        const parts = form.screenResolutionValue.split(' x ');
+        if (parts.length === 2) {
+          screenWidth = parseInt(parts[0]) || 1920;
+          screenHeight = parseInt(parts[1]) || 1080;
+        }
+      } else if (form.screenResolutionMode === 'random') {
+        // Pick a random resolution from the predefined list (excluding 'Based on User-Agent')
+        const resolutions = SCREEN_RESOLUTIONS.filter(r => r !== 'Based on User-Agent');
+        const randomRes = resolutions[Math.floor(Math.random() * resolutions.length)];
+        const parts = randomRes.split(' x ');
+        if (parts.length === 2) {
+          screenWidth = parseInt(parts[0]) || 1920;
+          screenHeight = parseInt(parts[1]) || 1080;
+        }
+      }
+
       const config = {
         name: form.name || `Profile ${Date.now()}`,
         browserType: form.browser === 'firefox' ? 'firefox' as const : 'chromium' as const,
@@ -681,6 +704,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           platform: form.os === 'windows' ? 'Win32' : form.os === 'macos' ? 'MacIntel' : 'Linux',
           appVersion: form.userAgent.replace('Mozilla/', ''),
           oscpu: form.os === 'windows' ? 'Windows NT 10.0; Win64; x64' : form.os === 'macos' ? 'Intel Mac OS X 10.15' : 'Linux x86_64',
+          screen: { width: screenWidth, height: screenHeight, colorDepth: 24 },
         },
         proxy: form.proxyType !== 'none' ? {
           protocol: form.proxyType as 'http' | 'https' | 'socks5',
