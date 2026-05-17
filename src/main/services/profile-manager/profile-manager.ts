@@ -446,8 +446,11 @@ export class ProfileManager {
       route.continue({ headers });
     });
 
-    // Anti-bot detection via CDP — set properties at browser engine level (undetectable)
-    // Use browser-level CDP session so scripts apply to ALL pages/tabs
+    // Anti-bot detection strategy:
+    // CRITICAL: Minimize CDP session usage to avoid Runtime.Enable detection (IsDevtoolOpen).
+    // Pixelscan/Cloudflare detect CDP via Runtime.consoleAPICalled side-effect.
+    // Strategy: Use CDP ONCE on first page for Emulation overrides + Page.addScriptToEvaluateOnNewDocument,
+    // then DETACH immediately. Use context.addInitScript() for everything else.
     const screenW2 = fpConfig?.screen?.width || 1920;
     const screenH2 = fpConfig?.screen?.height || 1080;
     const colorDepth2 = fpConfig?.screen?.colorDepth || 24;
@@ -459,258 +462,257 @@ export class ProfileManager {
     const chromeMajorVersion = chromeFullVersion.split('.')[0];
 
     try {
-      // Get CDP session for each page (including future pages)
-      const injectViaCDP = async (page: import('playwright').Page) => {
-        try {
-          const cdp = await context.newCDPSession(page);
+      // Use CDP session on first page ONLY — then detach to avoid Runtime.Enable leak
+      const firstPage = context.pages()[0] || await context.newPage();
+      const cdp = await context.newCDPSession(firstPage);
 
-          // Override User-Agent AND Client Hints at engine level via CDP
-          // This controls: navigator.userAgent, navigator.userAgentData, Sec-CH-UA headers
-          await cdp.send('Emulation.setUserAgentOverride', {
-            userAgent: effectiveUserAgent,
-            platform: fpConfig?.platform || 'Win32',
-            userAgentMetadata: {
-              brands: [
-                { brand: 'Google Chrome', version: chromeMajorVersion },
-                { brand: 'Chromium', version: chromeMajorVersion },
-                { brand: 'Not-A.Brand', version: '24' },
-              ],
-              fullVersionList: [
-                { brand: 'Google Chrome', version: chromeFullVersion },
-                { brand: 'Chromium', version: chromeFullVersion },
-                { brand: 'Not-A.Brand', version: '24.0.0.0' },
-              ],
-              fullVersion: chromeFullVersion,
-              platform: 'Windows',
-              platformVersion: '10.0.0',
-              architecture: 'x86',
-              model: '',
-              mobile: false,
-              bitness: '64',
-              wow64: false,
-            },
-          });
+      // Override User-Agent AND Client Hints at engine level via CDP
+      await cdp.send('Emulation.setUserAgentOverride', {
+        userAgent: effectiveUserAgent,
+        platform: fpConfig?.platform || 'Win32',
+        userAgentMetadata: {
+          brands: [
+            { brand: 'Google Chrome', version: chromeMajorVersion },
+            { brand: 'Chromium', version: chromeMajorVersion },
+            { brand: 'Not-A.Brand', version: '24' },
+          ],
+          fullVersionList: [
+            { brand: 'Google Chrome', version: chromeFullVersion },
+            { brand: 'Chromium', version: chromeFullVersion },
+            { brand: 'Not-A.Brand', version: '24.0.0.0' },
+          ],
+          fullVersion: chromeFullVersion,
+          platform: 'Windows',
+          platformVersion: '10.0.0',
+          architecture: 'x86',
+          model: '',
+          mobile: false,
+          bitness: '64',
+          wow64: false,
+        },
+      });
 
-          // Use Emulation domain to override screen metrics at engine level
-          // width/height = 0 means "use actual window size" — avoids content offset
-          // screenWidth/screenHeight spoof screen.width/screen.height for fingerprint
-          await cdp.send('Emulation.setDeviceMetricsOverride', {
-            width: 0,
-            height: 0,
-            deviceScaleFactor: 0,
-            mobile: false,
-            screenWidth: screenW2,
-            screenHeight: screenH2,
-            screenOrientation: { type: 'landscapePrimary', angle: 0 },
-          });
-
-          // Override hardware concurrency (CPU cores) at engine level
-          try {
-            await cdp.send('Emulation.setHardwareConcurrencyOverride', {
-              hardwareConcurrency: cpuCores,
-            });
-          } catch {
-            // Older Chromium versions may not support this
-          }
-
-          await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
-            source: `
-              (function() {
-                // --- webdriver: make it undefined ---
-                try {
-                  const wdDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
-                  if (wdDesc && wdDesc.get) {
-                    Object.defineProperty(Navigator.prototype, 'webdriver', {
-                      get: new Proxy(wdDesc.get, { apply: () => undefined }),
-                      configurable: true, enumerable: true
-                    });
-                  }
-                } catch(e) {}
-
-                // --- hardwareConcurrency ---
-                try {
-                  const hcDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'hardwareConcurrency');
-                  if (hcDesc && hcDesc.get) {
-                    Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
-                      get: new Proxy(hcDesc.get, { apply: () => ${cpuCores} }),
-                      configurable: true, enumerable: true
-                    });
-                  }
-                } catch(e) {}
-
-                // --- deviceMemory ---
-                try {
-                  const dmDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'deviceMemory');
-                  if (dmDesc && dmDesc.get) {
-                    Object.defineProperty(Navigator.prototype, 'deviceMemory', {
-                      get: new Proxy(dmDesc.get, { apply: () => ${ramGB} }),
-                      configurable: true, enumerable: true
-                    });
-                  }
-                } catch(e) {}
-
-                // --- Screen properties ---
-                const screenProps = {
-                  width: ${screenW2}, height: ${screenH2},
-                  availWidth: ${screenW2}, availHeight: ${screenH2 - 40},
-                  colorDepth: ${colorDepth2}, pixelDepth: ${colorDepth2}
-                };
-                for (const [prop, val] of Object.entries(screenProps)) {
-                  try {
-                    const desc = Object.getOwnPropertyDescriptor(Screen.prototype, prop);
-                    if (desc && desc.get) {
-                      // Accessor property — wrap with Proxy
-                      Object.defineProperty(Screen.prototype, prop, {
-                        get: new Proxy(desc.get, { apply: () => val }),
-                        configurable: true, enumerable: true
-                      });
-                    } else {
-                      // Data property or missing — define as accessor on prototype
-                      Object.defineProperty(Screen.prototype, prop, {
-                        get() { return val; },
-                        configurable: true, enumerable: true
-                      });
-                    }
-                  } catch(e) {}
-                  // Also override on the screen instance directly as fallback
-                  try {
-                    Object.defineProperty(screen, prop, {
-                      get() { return val; },
-                      configurable: true, enumerable: true
-                    });
-                  } catch(e) {}
-                }
-
-                // --- Clean Playwright artifacts ---
-                delete window.__playwright;
-                delete window.__pw_manual;
-                delete window.__pwInitScripts;
-
-                // --- Anti-DevTools detection ---
-                // Pixelscan detects DevTools via outerWidth/innerWidth difference
-                // and console.log timing. CDP sessions can trigger false positives.
-                // Fix: ensure outerWidth/Height always equals innerWidth/Height + chrome
-                try {
-                  // Override outerWidth/outerHeight to prevent size-based detection
-                  Object.defineProperty(window, 'outerWidth', {
-                    get: function() { return window.innerWidth; },
-                    configurable: true
-                  });
-                  Object.defineProperty(window, 'outerHeight', {
-                    get: function() { return window.innerHeight + 85; }, // Normal chrome height
-                    configurable: true
-                  });
-                } catch(e) {}
-
-                // Neutralize Firebug/DevTools detection via console tricks
-                try {
-                  const originalConsole = window.console;
-                  const noop = function() {};
-                  // Override console.profiles (used by some detectors)
-                  if (originalConsole) {
-                    Object.defineProperty(originalConsole, 'profiles', {
-                      get: noop,
-                      configurable: true
-                    });
-                  }
-                } catch(e) {}
-
-                // Block debugger-based detection (some sites use debugger statement timing)
-                // This is handled by not having DevTools open — CDP alone shouldn't trigger it
-
-                // --- Spoof navigator.userAgentData (Client Hints) ---
-                if (navigator.userAgentData) {
-                  const brands = [
-                    { brand: 'Google Chrome', version: '${chromeMajorVersion}' },
-                    { brand: 'Chromium', version: '${chromeMajorVersion}' },
-                    { brand: 'Not-A.Brand', version: '24' },
-                  ];
-                  try {
-                    Object.defineProperty(navigator, 'userAgentData', {
-                      value: {
-                        brands: brands,
-                        mobile: false,
-                        platform: 'Windows',
-                        getHighEntropyValues: function(hints) {
-                          return Promise.resolve({
-                            brands: brands,
-                            mobile: false,
-                            platform: 'Windows',
-                            platformVersion: '10.0.0',
-                            architecture: 'x86',
-                            bitness: '64',
-                            model: '',
-                            uaFullVersion: '${chromeFullVersion}',
-                            fullVersionList: [
-                              { brand: 'Google Chrome', version: '${chromeFullVersion}' },
-                              { brand: 'Chromium', version: '${chromeFullVersion}' },
-                              { brand: 'Not-A.Brand', version: '24.0.0.0' },
-                            ],
-                            wow64: false,
-                          });
-                        },
-                        toJSON: function() {
-                          return { brands: brands, mobile: false, platform: 'Windows' };
-                        }
-                      },
-                      configurable: true,
-                      enumerable: true,
-                      writable: false,
-                    });
-                  } catch(e) {}
-                }
-              })();
-            `
-          });
-        } catch(e) {
-          // CDP may fail for some pages
-        }
-      };
-
-      // Inject into all existing pages
-      for (const page of context.pages()) {
-        await injectViaCDP(page);
+      // Override hardware concurrency at engine level
+      try {
+        await cdp.send('Emulation.setHardwareConcurrencyOverride', {
+          hardwareConcurrency: cpuCores,
+        });
+      } catch {
+        // Older Chromium versions may not support this
       }
 
-      // Inject into all future pages
-      context.on('page', (page) => {
-        injectViaCDP(page);
-      });
+      // Disable Runtime domain to prevent consoleAPICalled leak
+      // This is the KEY fix for IsDevtoolOpen detection
+      try {
+        await cdp.send('Runtime.disable');
+      } catch {
+        // May not be enabled yet
+      }
+
+      // DETACH CDP session immediately to prevent Runtime.Enable leak
+      // Page.addScriptToEvaluateOnNewDocument persists even after detach
+      // But Emulation overrides are session-scoped — they will be lost.
+      // So we DON'T detach here, but we DO disable Runtime domain above.
+      // The trade-off: keep CDP for Emulation but disable Runtime to avoid detection.
+
+      console.log('[CDP] Applied Emulation overrides, Runtime.disable sent');
     } catch {
-      // CDP not available (e.g., Firefox) — fall back to addInitScript
-      console.warn('[Spoof] CDP not available, falling back to addInitScript');
+      // CDP not available (e.g., Firefox)
+      console.warn('[Spoof] CDP not available, falling back to addInitScript only');
     }
 
-    // Fallback: addInitScript for browsers that don't support CDP
+    // Use context.addInitScript() for ALL JS-level spoofing
+    // This does NOT trigger Runtime.Enable — it's injected at browser level
     await context.addInitScript(`
-      // Remove Playwright-specific global properties
-      if (typeof window !== 'undefined') {
-        delete window.__playwright;
-        delete window.__pw_manual;
-        delete window.__pwInitScripts;
+      (function() {
+        'use strict';
 
-        // Ensure chrome object exists with runtime (real Chrome always has this)
-        if (!window.chrome) window.chrome = {};
-        if (!window.chrome.runtime) {
-          Object.defineProperty(window.chrome, 'runtime', {
-            value: Object.create(null),
-            writable: false,
-            enumerable: true,
-            configurable: false
-          });
-        }
+        // --- ANTI-CDP/DEVTOOLS DETECTION (IsDevtoolOpen) ---
+        // This MUST run before any other code on the page.
+        // Neutralize Runtime.consoleAPICalled detection:
+        // When Runtime.Enable is active, console.log triggers consoleAPICalled event
+        // which serializes arguments (calling getters). Sites exploit this.
 
-        // Fix permissions.query for notifications
-        if (navigator.permissions && navigator.permissions.query) {
-          const origQuery = navigator.permissions.query.bind(navigator.permissions);
-          navigator.permissions.query = function(desc) {
-            if (desc.name === 'notifications') {
-              return Promise.resolve({ state: Notification.permission });
+        // Replace console with a Proxy that prevents getter-based detection
+        try {
+          const origConsole = console;
+          const nativeToString = Function.prototype.toString;
+
+          // Create a handler that intercepts console method calls
+          const handler = {
+            get(target, prop, receiver) {
+              if (prop === Symbol.toStringTag) return 'console';
+              const val = Reflect.get(target, prop, receiver);
+              if (typeof val === 'function') {
+                // Wrap console methods to prevent argument serialization leak
+                const wrapped = function() {
+                  // Don't pass objects with getters — just pass primitives
+                  const safeArgs = [];
+                  for (let i = 0; i < arguments.length; i++) {
+                    const arg = arguments[i];
+                    if (arg === null || arg === undefined || typeof arg !== 'object') {
+                      safeArgs.push(arg);
+                    } else {
+                      // For objects, pass a frozen shallow copy to prevent getter calls
+                      try { safeArgs.push(String(arg)); } catch(e) { safeArgs.push('[object]'); }
+                    }
+                  }
+                  return val.apply(target, safeArgs);
+                };
+                // Make toString look native
+                wrapped.toString = function() { return nativeToString.call(val); };
+                return wrapped;
+              }
+              return val;
             }
-            return origQuery(desc);
           };
-        }
-      }
+          window.console = new Proxy(origConsole, handler);
+        } catch(e) {}
+
+        // --- webdriver: make it undefined ---
+        try {
+          Object.defineProperty(Navigator.prototype, 'webdriver', {
+            get: function() { return undefined; },
+            configurable: true, enumerable: true
+          });
+        } catch(e) {}
+
+        // --- hardwareConcurrency ---
+        try {
+          Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {
+            get: function() { return ${cpuCores}; },
+            configurable: true, enumerable: true
+          });
+        } catch(e) {}
+
+        // --- deviceMemory ---
+        try {
+          Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+            get: function() { return ${ramGB}; },
+            configurable: true, enumerable: true
+          });
+        } catch(e) {}
+
+        // --- Screen properties ---
+        var screenProps = {
+          width: ${screenW2}, height: ${screenH2},
+          availWidth: ${screenW2}, availHeight: ${screenH2 - 40},
+          colorDepth: ${colorDepth2}, pixelDepth: ${colorDepth2}
+        };
+        Object.keys(screenProps).forEach(function(prop) {
+          var val = screenProps[prop];
+          try {
+            Object.defineProperty(Screen.prototype, prop, {
+              get: function() { return val; },
+              configurable: true, enumerable: true
+            });
+          } catch(e) {}
+          try {
+            Object.defineProperty(screen, prop, {
+              get: function() { return val; },
+              configurable: true, enumerable: true
+            });
+          } catch(e) {}
+        });
+
+        // --- outerWidth/outerHeight (DevTools size detection) ---
+        try {
+          Object.defineProperty(window, 'outerWidth', {
+            get: function() { return window.innerWidth; },
+            configurable: true
+          });
+          Object.defineProperty(window, 'outerHeight', {
+            get: function() { return window.innerHeight + 85; },
+            configurable: true
+          });
+        } catch(e) {}
+
+        // --- Clean Playwright artifacts ---
+        try {
+          delete window.__playwright;
+          delete window.__pw_manual;
+          delete window.__pwInitScripts;
+        } catch(e) {}
+
+        // --- Ensure chrome.runtime exists (real Chrome always has this) ---
+        try {
+          if (!window.chrome) window.chrome = {};
+          if (!window.chrome.runtime) {
+            Object.defineProperty(window.chrome, 'runtime', {
+              value: Object.create(null),
+              writable: false, enumerable: true, configurable: false
+            });
+          }
+        } catch(e) {}
+
+        // --- Neutralize debugger-based timing detection ---
+        try {
+          var origFunction = Function;
+          window.Function = function() {
+            var args = Array.prototype.slice.call(arguments);
+            if (args.length > 0 && typeof args[args.length - 1] === 'string') {
+              args[args.length - 1] = args[args.length - 1].replace(/\\bdebugger\\b/g, '');
+            }
+            return origFunction.apply(this, args);
+          };
+          window.Function.prototype = origFunction.prototype;
+          window.Function.prototype.constructor = window.Function;
+          window.Function.toString = function() { return 'function Function() { [native code] }'; };
+        } catch(e) {}
+
+        // --- Spoof navigator.userAgentData (Client Hints) ---
+        try {
+          if (navigator.userAgentData) {
+            var brands = [
+              { brand: 'Google Chrome', version: '${chromeMajorVersion}' },
+              { brand: 'Chromium', version: '${chromeMajorVersion}' },
+              { brand: 'Not-A.Brand', version: '24' },
+            ];
+            Object.defineProperty(navigator, 'userAgentData', {
+              value: {
+                brands: brands,
+                mobile: false,
+                platform: 'Windows',
+                getHighEntropyValues: function(hints) {
+                  return Promise.resolve({
+                    brands: brands,
+                    mobile: false,
+                    platform: 'Windows',
+                    platformVersion: '10.0.0',
+                    architecture: 'x86',
+                    bitness: '64',
+                    model: '',
+                    uaFullVersion: '${chromeFullVersion}',
+                    fullVersionList: [
+                      { brand: 'Google Chrome', version: '${chromeFullVersion}' },
+                      { brand: 'Chromium', version: '${chromeFullVersion}' },
+                      { brand: 'Not-A.Brand', version: '24.0.0.0' },
+                    ],
+                    wow64: false,
+                  });
+                },
+                toJSON: function() {
+                  return { brands: brands, mobile: false, platform: 'Windows' };
+                }
+              },
+              configurable: true, enumerable: true, writable: false,
+            });
+          }
+        } catch(e) {}
+
+        // --- Fix permissions.query for notifications ---
+        try {
+          if (navigator.permissions && navigator.permissions.query) {
+            var origQuery = navigator.permissions.query.bind(navigator.permissions);
+            navigator.permissions.query = function(desc) {
+              if (desc.name === 'notifications') {
+                return Promise.resolve({ state: Notification.permission });
+              }
+              return origQuery(desc);
+            };
+          }
+        } catch(e) {}
+      })();
     `);
 
     // Restore saved cookies from database
