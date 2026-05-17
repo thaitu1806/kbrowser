@@ -229,8 +229,10 @@ export class ProfileManager {
       // Set browser language at Chromium engine level — this controls Accept-Language header
       `--lang=${effectiveLocale}`,
       `--accept-lang=${effectiveLocale},${effectiveLang};q=0.9`,
-      // Set window size to match screen config
+      // Set window size to match screen config — must match spoofed screen.width/height
       `--window-size=${fpConfig?.screen?.width || 1920},${fpConfig?.screen?.height || 1080}`,
+      // Start maximized so window fills the screen (prevents screen vs window mismatch)
+      '--start-maximized',
     ];
 
     // WebRTC leak prevention at browser engine level
@@ -596,10 +598,19 @@ export class ProfileManager {
         } catch(e) {}
 
         // === SCREEN PROPERTIES ===
+        // Screen resolution MUST be >= window size, otherwise sites detect spoofing.
+        // Strategy: Use configured screen size but ensure it's >= actual window dimensions.
+        // Also make availWidth/availHeight consistent (availHeight = height - taskbar).
+        var cfgScreenW = ${screenW2};
+        var cfgScreenH = ${screenH2};
+        var cfgColorDepth = ${colorDepth2};
+        // Use the larger of configured vs actual window size
+        var actualScreenW = Math.max(cfgScreenW, window.outerWidth || window.innerWidth || cfgScreenW);
+        var actualScreenH = Math.max(cfgScreenH, window.outerHeight || window.innerHeight || cfgScreenH);
         var screenProps = {
-          width: ${screenW2}, height: ${screenH2},
-          availWidth: ${screenW2}, availHeight: ${screenH2 - 40},
-          colorDepth: ${colorDepth2}, pixelDepth: ${colorDepth2}
+          width: actualScreenW, height: actualScreenH,
+          availWidth: actualScreenW, availHeight: actualScreenH - 40,
+          colorDepth: cfgColorDepth, pixelDepth: cfgColorDepth
         };
         Object.keys(screenProps).forEach(function(prop) {
           var val = screenProps[prop];
@@ -617,14 +628,17 @@ export class ProfileManager {
           } catch(e) {}
         });
 
-        // === OUTER WIDTH/HEIGHT (DevTools size detection) ===
+        // === OUTER WIDTH/HEIGHT ===
+        // outerWidth should equal innerWidth (no DevTools side panel)
+        // outerHeight should equal innerHeight + chrome UI (title bar + tabs ~ 85px)
+        // These must be <= screen.width/height
         try {
           Object.defineProperty(window, 'outerWidth', {
-            get: function() { return window.innerWidth; },
+            get: function() { return Math.min(window.innerWidth, actualScreenW); },
             configurable: true
           });
           Object.defineProperty(window, 'outerHeight', {
-            get: function() { return window.innerHeight + 85; },
+            get: function() { return Math.min(window.innerHeight + 85, actualScreenH); },
             configurable: true
           });
         } catch(e) {}
