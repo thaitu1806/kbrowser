@@ -250,6 +250,7 @@ export class ProfileManager {
     // Using real Chrome stable eliminates kernel/UA mismatch entirely.
     let useRealChrome = false;
     let detectedChromeVersion = '';
+    let detectedChromePath = '';
 
     if (row.browser_type !== 'firefox') {
       // Check if Chrome stable is installed on the system
@@ -262,6 +263,7 @@ export class ProfileManager {
       for (const chromePath of chromePaths) {
         if (fs.existsSync(chromePath)) {
           useRealChrome = true;
+          detectedChromePath = chromePath;
           // Try to read Chrome version from the version file next to chrome.exe
           try {
             const chromeDir = path.dirname(chromePath);
@@ -335,8 +337,8 @@ export class ProfileManager {
       screen: { width: screenW, height: screenH },
       ignoreDefaultArgs: ['--enable-automation'],
       colorScheme: 'light',
-      // Use real Chrome if available — much harder to detect as automation
-      ...(useRealChrome ? { channel: 'chrome' } : {}),
+      // Use real Chrome executable path — channel doesn't work with launchPersistentContext
+      ...(useRealChrome && detectedChromePath ? { executablePath: detectedChromePath } : {}),
       env: {
         ...process.env,
         GOOGLE_API_KEY: 'no',
