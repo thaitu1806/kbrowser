@@ -1960,11 +1960,13 @@ tr:hover { background: #f8faff; }
 
 .os-dropdown-item.selected {
   color: var(--primary);
-  font-weight: 500;
+  font-weight: 600;
+  background: var(--primary-light);
 }
 
 .os-dropdown-check {
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--primary);
 }
 

@@ -180,7 +180,77 @@ Hệ thống Quản lý Danh tính Số (Digital Identity Management) là một 
 5. WHEN Admin xóa tiện ích khỏi kho tập trung, THE Trung_tâm_tiện_ích SHALL gỡ cài đặt tiện ích đó khỏi tất cả Hồ_sơ_trình_duyệt đã được gán
 6. IF file tiện ích tải lên không đúng định dạng hoặc bị hỏng, THEN THE Trung_tâm_tiện_ích SHALL từ chối file và hiển thị thông báo lỗi mô tả nguyên nhân cụ thể
 
-### Yêu cầu 14: Tuần tự hóa và khôi phục cấu hình hồ sơ
+### Yêu cầu 14: Giả lập WebGL Renderer và Parameters
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có thông tin GPU (WebGL Renderer/Vendor) và các tham số WebGL riêng biệt, để các trang web không thể liên kết các hồ sơ thông qua thông tin phần cứng đồ họa.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập giá trị `UNMASKED_VENDOR_WEBGL` và `UNMASKED_RENDERER_WEBGL` (từ extension WEBGL_debug_renderer_info) theo cấu hình của hồ sơ
+2. WHEN Người_dùng cấu hình hồ sơ, THE Bộ_giả_lập_fingerprint SHALL cho phép chọn cặp Vendor/Renderer từ danh sách GPU thực tế phổ biến (Intel, NVIDIA, AMD, Apple) phù hợp với hệ điều hành trong User-Agent
+3. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập các tham số WebGL bao gồm MAX_TEXTURE_SIZE, MAX_VERTEX_ATTRIBS, MAX_VARYING_VECTORS, MAX_CUBE_MAP_TEXTURE_SIZE và MAX_RENDERBUFFER_SIZE sao cho nhất quán với GPU Renderer đã chọn
+4. THE Bộ_giả_lập_fingerprint SHALL đảm bảo tính nhất quán giữa WebGL Renderer, platform trong User-Agent và hệ điều hành (ví dụ: không cho phép GPU NVIDIA desktop khi platform là MacIntel với chip Apple Silicon)
+5. WHILE một Hồ_sơ_trình_duyệt đang hoạt động, THE Bộ_giả_lập_fingerprint SHALL duy trì giá trị WebGL Renderer và Parameters nhất quán trong suốt phiên làm việc
+
+### Yêu cầu 15: Giả lập Battery API và Media Devices
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có thông tin pin và thiết bị media riêng biệt, để các trang web không thể liên kết các hồ sơ thông qua mức pin hoặc danh sách camera/microphone.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập hoặc vô hiệu hóa Battery API (`navigator.getBattery()`) theo cấu hình của hồ sơ để ngăn rò rỉ mức pin thực
+2. WHEN Người_dùng cấu hình Battery API ở chế độ "Spoof", THE Bộ_giả_lập_fingerprint SHALL trả về giá trị pin ngẫu nhiên nhưng nhất quán trong phiên (level, charging, chargingTime, dischargingTime)
+3. WHEN Người_dùng cấu hình Battery API ở chế độ "Disable", THE Bộ_giả_lập_fingerprint SHALL khiến `navigator.getBattery()` trả về Promise rejected hoặc undefined
+4. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập kết quả `navigator.mediaDevices.enumerateDevices()` để trả về danh sách thiết bị ảo (số lượng và deviceId) khác biệt giữa các hồ sơ
+5. THE Bộ_giả_lập_fingerprint SHALL đảm bảo deviceId được tạo từ seed cố định của hồ sơ để duy trì tính nhất quán giữa các phiên làm việc
+
+### Yêu cầu 16: Giả lập Speech Synthesis và Navigator Plugins
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có danh sách giọng nói và plugins riêng biệt, để các trang web không thể nhận diện máy tính thực thông qua các API này.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập kết quả `speechSynthesis.getVoices()` để trả về danh sách giọng nói phù hợp với locale và hệ điều hành trong cấu hình hồ sơ
+2. WHEN Người_dùng cấu hình hồ sơ với locale "en-US" và platform "Win32", THE Bộ_giả_lập_fingerprint SHALL trả về danh sách giọng nói Windows tiếng Anh phổ biến (Microsoft David, Microsoft Zira)
+3. WHEN một Hồ_sơ_trình_duyệt được khởi chạy trên Firefox, THE Bộ_giả_lập_fingerprint SHALL giả lập `navigator.plugins` và `navigator.mimeTypes` để trả về danh sách phù hợp với phiên bản trình duyệt trong User-Agent
+4. FOR ALL hồ sơ trên cùng một máy tính, THE Bộ_giả_lập_fingerprint SHALL đảm bảo danh sách voices và plugins khác biệt giữa các hồ sơ có cấu hình locale/OS khác nhau
+
+### Yêu cầu 17: Giả lập Network Information và Touch Support
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có thông tin mạng và touch support riêng biệt, để các trang web không thể correlate các hồ sơ qua Network Information API hoặc khả năng cảm ứng.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập `navigator.connection` bao gồm effectiveType, downlink và rtt theo cấu hình hồ sơ
+2. WHEN Người_dùng cấu hình hồ sơ giả lập thiết bị mobile, THE Bộ_giả_lập_fingerprint SHALL đặt `navigator.maxTouchPoints` phù hợp (ví dụ: 5 cho mobile, 0 cho desktop) và đảm bảo sự hiện diện/vắng mặt của sự kiện `ontouchstart`
+3. WHEN Người_dùng cấu hình hồ sơ giả lập thiết bị desktop, THE Bộ_giả_lập_fingerprint SHALL đặt `navigator.maxTouchPoints` bằng 0 và loại bỏ `ontouchstart` khỏi window
+4. THE Bộ_giả_lập_fingerprint SHALL đảm bảo tính nhất quán giữa maxTouchPoints, User-Agent (mobile/desktop) và screen resolution trong cùng một hồ sơ
+5. WHEN Người_dùng cấu hình hồ sơ, THE Bộ_giả_lập_fingerprint SHALL cho phép cấu hình `navigator.doNotTrack` với giá trị "1", "0" hoặc null riêng biệt cho mỗi hồ sơ
+
+### Yêu cầu 18: Giả lập ClientRects và DOMRect
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có kết quả DOMRect/ClientRects riêng biệt, để các trang web không thể fingerprint hồ sơ qua sub-pixel rendering differences.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL thêm nhiễu nhỏ (noise) vào kết quả `Element.getBoundingClientRect()` và `Element.getClientRects()` sao cho giá trị sub-pixel khác biệt giữa các hồ sơ
+2. THE Bộ_giả_lập_fingerprint SHALL sử dụng seed cố định của hồ sơ để tạo nhiễu DOMRect, đảm bảo kết quả nhất quán trong cùng một phiên và giữa các phiên
+3. THE Bộ_giả_lập_fingerprint SHALL giới hạn mức nhiễu DOMRect trong khoảng ±0.001 đến ±0.01 pixel để không ảnh hưởng đến hiển thị trang web nhưng đủ để tạo fingerprint khác biệt
+4. WHILE một Hồ_sơ_trình_duyệt đang hoạt động, THE Bộ_giả_lập_fingerprint SHALL duy trì giá trị nhiễu DOMRect nhất quán cho cùng một phần tử trong suốt phiên làm việc
+
+### Yêu cầu 19: Kiểm tra tính nhất quán fingerprint toàn diện (Cross-validation)
+
+**User Story:** Là một người dùng, tôi muốn hệ thống tự động kiểm tra tính nhất quán giữa tất cả các thành phần fingerprint, để tôi không vô tình tạo ra hồ sơ có cấu hình mâu thuẫn dễ bị phát hiện.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN Người_dùng lưu cấu hình hồ sơ, THE Bộ_giả_lập_fingerprint SHALL kiểm tra tính nhất quán giữa: User-Agent OS ↔ platform ↔ oscpu ↔ WebGL Renderer ↔ Screen resolution ↔ Touch support ↔ Timezone ↔ Locale
+2. IF cấu hình hồ sơ có mâu thuẫn (ví dụ: UA nói Windows nhưng WebGL Renderer là Apple GPU), THEN THE Bộ_giả_lập_fingerprint SHALL hiển thị cảnh báo chi tiết cho Người_dùng và đề xuất giá trị phù hợp
+3. WHEN Người_dùng tạo hồ sơ mới với chế độ "Auto-generate", THE Bộ_giả_lập_fingerprint SHALL tự động tạo bộ fingerprint hoàn chỉnh và nhất quán dựa trên hệ điều hành và loại thiết bị được chọn
+4. THE Bộ_giả_lập_fingerprint SHALL cung cấp bộ preset fingerprint cho các cấu hình phổ biến: Windows Desktop (Intel/NVIDIA/AMD), MacBook (Apple M1/M2/M3), Linux Desktop, Android Mobile, iPhone
+5. IF Người_dùng chọn proxy có IP thuộc quốc gia khác với timezone/locale đã cấu hình, THEN THE Bộ_giả_lập_fingerprint SHALL cảnh báo về sự không nhất quán địa lý và đề xuất timezone/locale phù hợp với IP
+
+### Yêu cầu 20: Tuần tự hóa và khôi phục cấu hình hồ sơ
 
 **User Story:** Là một người dùng, tôi muốn xuất và nhập cấu hình hồ sơ, để tôi có thể sao lưu hoặc di chuyển cấu hình giữa các hệ thống.
 
@@ -190,3 +260,23 @@ Hệ thống Quản lý Danh tính Số (Digital Identity Management) là một 
 2. WHEN Người_dùng nhập file cấu hình JSON, THE Trình_quản_lý_hồ_sơ SHALL phân tích (parse) file và tạo Hồ_sơ_trình_duyệt mới với cấu hình tương ứng
 3. FOR ALL cấu hình hồ sơ hợp lệ, việc tuần tự hóa rồi phân tích rồi tuần tự hóa lại SHALL tạo ra kết quả tương đương với bản tuần tự hóa ban đầu (thuộc tính round-trip)
 4. IF file cấu hình JSON không hợp lệ hoặc thiếu trường bắt buộc, THEN THE Trình_quản_lý_hồ_sơ SHALL trả về thông báo lỗi mô tả cụ thể trường bị thiếu hoặc giá trị không hợp lệ
+
+### Yêu cầu 21: Giả lập Keyboard Layout và Input Events
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có keyboard layout phù hợp với locale đã cấu hình, để các trang web không thể phát hiện keyboard thực của máy tính.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập `KeyboardEvent.code` và `KeyboardEvent.key` mapping phù hợp với keyboard layout của locale đã cấu hình
+2. WHEN Người_dùng cấu hình hồ sơ với locale không phải tiếng Anh (ví dụ: "de-DE"), THE Bộ_giả_lập_fingerprint SHALL đảm bảo keyboard layout detection scripts nhận diện đúng layout tương ứng (QWERTZ cho German)
+3. THE Bộ_giả_lập_fingerprint SHALL đảm bảo tính nhất quán giữa keyboard layout, navigator.language và locale trong cùng một hồ sơ
+
+### Yêu cầu 22: Giả lập Permissions API State
+
+**User Story:** Là một người dùng, tôi muốn mỗi hồ sơ trình duyệt có trạng thái permissions riêng biệt, để các trang web không thể fingerprint hồ sơ qua kết quả Permissions API.
+
+#### Tiêu chí chấp nhận
+
+1. WHEN một Hồ_sơ_trình_duyệt được khởi chạy, THE Bộ_giả_lập_fingerprint SHALL giả lập kết quả `navigator.permissions.query()` cho các permission: notifications, geolocation, camera, microphone theo cấu hình hồ sơ
+2. WHEN Người_dùng cấu hình permissions cho hồ sơ, THE Bộ_giả_lập_fingerprint SHALL cho phép đặt trạng thái mỗi permission là "granted", "denied" hoặc "prompt" riêng biệt
+3. THE Bộ_giả_lập_fingerprint SHALL đảm bảo trạng thái permissions nhất quán giữa `Permissions API` và hành vi thực tế của trình duyệt (ví dụ: nếu notifications = "denied" thì Notification.permission cũng phải trả về "denied")

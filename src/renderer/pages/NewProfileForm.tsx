@@ -11,8 +11,8 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'advanced', label: 'Advanced' },
 ];
 
-type BrowserType = 'chromium' | 'firefox';
-type OSType = 'windows' | 'macos' | 'linux' | 'android' | 'ios';
+export type BrowserType = 'chromium' | 'firefox';
+export type OSType = 'windows' | 'macos' | 'linux' | 'android' | 'ios';
 type WebRTCMode = 'forward' | 'replace' | 'real' | 'disabled' | 'disable-udp';
 type ProxyType = 'none' | 'http' | 'https' | 'socks5';
 
@@ -38,7 +38,7 @@ const OS_META: { id: OSType; icon: string; label: string }[] = [
 ];
 
 /** Maps OS + version to the OS token used in User-Agent strings. */
-function getOSToken(os: OSType, version: string): string {
+export function getOSToken(os: OSType, version: string): string {
   switch (os) {
     case 'windows': {
       if (version === 'Windows 11') return 'Windows NT 10.0; Win64; x64';
@@ -48,8 +48,11 @@ function getOSToken(os: OSType, version: string): string {
       return 'Windows NT 10.0; Win64; x64';
     }
     case 'macos': {
-      const ver = version.match(/\d+/)?.[0] ?? '15';
-      return `Macintosh; Intel Mac OS X 10_${ver}_7`;
+      const ver = parseInt(version.match(/\d+/)?.[0] ?? '15', 10);
+      if (ver >= 11) {
+        return `Macintosh; Intel Mac OS X ${ver}_1_0`;
+      }
+      return 'Macintosh; Intel Mac OS X 10_15_7';
     }
     case 'linux':
       return 'X11; Linux x86_64';
@@ -62,6 +65,17 @@ function getOSToken(os: OSType, version: string): string {
       return `iPhone; CPU iPhone OS ${ver}_0 like Mac OS X`;
     }
   }
+}
+
+/** Computes the oscpu value for Firefox fingerprint based on OS and version. */
+export function getOscpu(os: OSType, osVersion: string, browser: BrowserType): string {
+  if (browser !== 'firefox') return '';
+  if (os === 'windows') return 'Windows NT 10.0; Win64; x64';
+  if (os === 'macos') {
+    const ver = parseInt(osVersion.match(/\d+/)?.[0] ?? '15', 10);
+    return ver >= 11 ? `Intel Mac OS X ${ver}.1` : 'Intel Mac OS X 10.15';
+  }
+  return 'Linux x86_64';
 }
 
 /** Generates a User-Agent string based on browser, version, and OS. */
@@ -703,7 +717,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           webrtc: form.webrtc === 'disabled' ? 'disable' as const : form.webrtc === 'forward' ? 'proxy' as const : 'real' as const,
           platform: form.os === 'windows' ? 'Win32' : form.os === 'macos' ? 'MacIntel' : 'Linux',
           appVersion: form.userAgent.replace('Mozilla/', ''),
-          oscpu: form.browser === 'firefox' ? (form.os === 'windows' ? 'Windows NT 10.0; Win64; x64' : form.os === 'macos' ? 'Intel Mac OS X 10.15' : 'Linux x86_64') : '',
+          oscpu: getOscpu(form.os, form.osVersion, form.browser),
           screen: { width: screenWidth, height: screenHeight, colorDepth: 24 },
         },
         proxy: form.proxyType !== 'none' ? {
@@ -781,6 +795,8 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
             randomFingerprint: form.randomFingerprint,
             group: form.group,
             tags: form.tags,
+            os: form.os,
+            osVersion: form.osVersion,
           };
           await api.saveExtendedData(profileId, JSON.stringify(extendedData));
         }
@@ -874,10 +890,21 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                     version={form.os === os.id ? form.osVersion : OS_VERSIONS[os.id][0]}
                     versions={OS_VERSIONS[os.id]}
                     onSelect={(osId) => {
-                      update('os', osId);
-                      update('osVersion', OS_VERSIONS[osId][0]);
+                      if (form.os !== osId) {
+                        setForm((prev) => {
+                          const next = { ...prev, os: osId, osVersion: OS_VERSIONS[osId][0] };
+                          next.userAgent = generateUserAgent(next.browser, next.browserVersion, next.os, next.osVersion);
+                          return next;
+                        });
+                      }
                     }}
-                    onVersionChange={(ver) => update('osVersion', ver)}
+                    onVersionChange={(ver) => {
+                      setForm((prev) => {
+                        const next = { ...prev, os: os.id, osVersion: ver };
+                        next.userAgent = generateUserAgent(next.browser, next.browserVersion, next.os, next.osVersion);
+                        return next;
+                      });
+                    }}
                   />
                 ))}
               </div>
@@ -1772,10 +1799,10 @@ function OsButton({
               <button
                 key={ver}
                 className={`os-dropdown-item ${version === ver ? 'selected' : ''}`}
-                onClick={() => { onVersionChange(ver); onSelect(os.id); setOpen(false); }}
+                onClick={() => { onVersionChange(ver); setOpen(false); }}
               >
                 <span>{ver}</span>
-                <span className="os-dropdown-check">✓</span>
+                {version === ver && <span className="os-dropdown-check">✓</span>}
               </button>
             ))}
           </div>

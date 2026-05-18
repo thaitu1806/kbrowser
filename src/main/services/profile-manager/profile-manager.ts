@@ -419,8 +419,18 @@ export class ProfileManager {
 
     // Client Hints platform name (different from navigator.platform)
     const chPlatform = isMac ? 'macOS' : isLinux ? 'Linux' : 'Windows';
-    // Platform version for Client Hints
-    const chPlatformVersion = isMac ? '13.0.0' : isLinux ? '6.1.0' : '10.0.0';
+    // Platform version for Client Hints — derive from User-Agent string
+    let chPlatformVersion = '10.0.0';
+    if (isMac) {
+      // Parse from UA: "Mac OS X 26_1_0" → "26.1.0"
+      const macVerMatch = effectiveUserAgent.match(/Mac OS X (\d+)[_.](\d+)[_.](\d+)/);
+      chPlatformVersion = macVerMatch ? `${macVerMatch[1]}.${macVerMatch[2]}.${macVerMatch[3]}` : '15.1.0';
+    } else if (isLinux) {
+      chPlatformVersion = '6.1.0';
+    } else {
+      // Windows: NT 10.0 → platformVersion 15.0.0 (Win11) or 10.0.0 (Win10)
+      chPlatformVersion = effectiveUserAgent.includes('Windows NT 10.0') ? '15.0.0' : '10.0.0';
+    }
     // Architecture
     const chArchitecture = isMac ? 'arm' : 'x86';
     // Bitness
@@ -484,6 +494,11 @@ export class ProfileManager {
       }
       // Override Sec-CH-UA-Platform to match configured OS
       headers['sec-ch-ua-platform'] = `"${chPlatform}"`;
+      // Override Sec-CH-UA-Platform-Version — always set when present, and also set for
+      // BrowserScan-like sites that request high-entropy hints via Accept-CH
+      if (headers['sec-ch-ua-platform-version']) {
+        headers['sec-ch-ua-platform-version'] = `"${chPlatformVersion}"`;
+      }
       // Ensure User-Agent header matches
       if (effectiveUserAgent) {
         headers['user-agent'] = effectiveUserAgent;

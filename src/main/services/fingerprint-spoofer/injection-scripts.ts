@@ -235,7 +235,8 @@ export function generateHardwareScript(cpuCores: number, ramGB: number): string 
 
 /**
  * Generate a JavaScript injection script that spoofs navigator.userAgent,
- * navigator.appVersion, navigator.platform, and navigator.oscpu.
+ * navigator.appVersion, navigator.platform, navigator.oscpu, and
+ * navigator.userAgentData (Client Hints API).
  *
  * @param userAgent - The User-Agent string to report
  * @param appVersion - The appVersion string to report
@@ -249,12 +250,58 @@ export function generateUserAgentScript(
   platform: string,
   oscpu: string,
 ): string {
+  // Derive Client Hints values from the UA and platform
+  let chPlatform = 'Windows';
+  let chPlatformVersion = '10.0.0';
+  let chMobile = false;
+
+  if (platform === 'MacIntel') {
+    chPlatform = 'macOS';
+    // Extract macOS version from UA: "Mac OS X 26_1_0" → "26.1.0"
+    const macMatch = userAgent.match(/Mac OS X (\d+)[_.](\d+)[_.](\d+)/);
+    if (macMatch) {
+      chPlatformVersion = `${macMatch[1]}.${macMatch[2]}.${macMatch[3]}`;
+    } else {
+      chPlatformVersion = '10.15.7';
+    }
+  } else if (platform === 'Linux') {
+    if (userAgent.includes('Android')) {
+      chPlatform = 'Android';
+      const androidMatch = userAgent.match(/Android (\d+)/);
+      chPlatformVersion = androidMatch ? `${androidMatch[1]}.0.0` : '14.0.0';
+      chMobile = true;
+    } else {
+      chPlatform = 'Linux';
+      chPlatformVersion = '6.5.0';
+    }
+  } else {
+    // Windows
+    chPlatform = 'Windows';
+    if (userAgent.includes('Windows NT 10.0')) {
+      chPlatformVersion = '15.0.0';
+    } else if (userAgent.includes('Windows NT 6.3')) {
+      chPlatformVersion = '6.3.0';
+    } else if (userAgent.includes('Windows NT 6.1')) {
+      chPlatformVersion = '6.1.0';
+    } else {
+      chPlatformVersion = '15.0.0';
+    }
+  }
+
+  // Extract Chrome version for brands
+  const chromeMatch = userAgent.match(/Chrome\/(\d+)/);
+  const chromeMajor = chromeMatch ? chromeMatch[1] : '146';
+
   return `(function() {
   'use strict';
   const USER_AGENT = ${JSON.stringify(userAgent)};
   const APP_VERSION = ${JSON.stringify(appVersion)};
   const PLATFORM = ${JSON.stringify(platform)};
   const OSCPU = ${JSON.stringify(oscpu)};
+  const CH_PLATFORM = ${JSON.stringify(chPlatform)};
+  const CH_PLATFORM_VERSION = ${JSON.stringify(chPlatformVersion)};
+  const CH_MOBILE = ${JSON.stringify(chMobile)};
+  const CHROME_MAJOR = ${JSON.stringify(chromeMajor)};
 
   Object.defineProperty(navigator, 'userAgent', {
     get: function() { return USER_AGENT; },
@@ -279,6 +326,45 @@ export function generateUserAgentScript(
   if (OSCPU) {
     Object.defineProperty(navigator, 'oscpu', {
       get: function() { return OSCPU; },
+      configurable: true,
+      enumerable: true
+    });
+  }
+
+  // Spoof navigator.userAgentData (Client Hints API)
+  if ('userAgentData' in navigator) {
+    var brands = [
+      { brand: 'Chromium', version: CHROME_MAJOR },
+      { brand: 'Google Chrome', version: CHROME_MAJOR },
+      { brand: 'Not-A.Brand', version: '99' }
+    ];
+
+    var uaData = {
+      brands: brands,
+      mobile: CH_MOBILE,
+      platform: CH_PLATFORM,
+      getHighEntropyValues: function(hints) {
+        return Promise.resolve({
+          brands: brands,
+          mobile: CH_MOBILE,
+          platform: CH_PLATFORM,
+          platformVersion: CH_PLATFORM_VERSION,
+          architecture: PLATFORM === 'MacIntel' ? 'arm' : 'x86',
+          bitness: '64',
+          model: '',
+          uaFullVersion: USER_AGENT.match(/Chrome\\/(\\d+\\.\\d+\\.\\d+\\.\\d+)/)?.[1] || CHROME_MAJOR + '.0.0.0',
+          fullVersionList: brands.map(function(b) {
+            return { brand: b.brand, version: b.version + '.0.0.0' };
+          })
+        });
+      },
+      toJSON: function() {
+        return { brands: brands, mobile: CH_MOBILE, platform: CH_PLATFORM };
+      }
+    };
+
+    Object.defineProperty(navigator, 'userAgentData', {
+      get: function() { return uaData; },
       configurable: true,
       enumerable: true
     });
