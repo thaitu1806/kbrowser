@@ -249,6 +249,7 @@ export function generateUserAgentScript(
   appVersion: string,
   platform: string,
   oscpu: string,
+  osVersion?: string,
 ): string {
   // Derive Client Hints values from the UA and platform
   let chPlatform = 'Windows';
@@ -257,34 +258,63 @@ export function generateUserAgentScript(
 
   if (platform === 'MacIntel') {
     chPlatform = 'macOS';
-    // Extract macOS version from UA: "Mac OS X 26_1_0" → "26.1.0"
-    const macMatch = userAgent.match(/Mac OS X (\d+)[_.](\d+)[_.](\d+)/);
-    if (macMatch) {
-      chPlatformVersion = `${macMatch[1]}.${macMatch[2]}.${macMatch[3]}`;
+    // Use osVersion config first, fallback to parsing UA
+    const macVer = osVersion?.match(/(\d+)/);
+    if (macVer) {
+      chPlatformVersion = `${macVer[1]}.1.0`;
     } else {
-      chPlatformVersion = '10.15.7';
+      const macMatch = userAgent.match(/Mac OS X (\d+)[_.](\d+)[_.](\d+)/);
+      chPlatformVersion = macMatch ? `${macMatch[1]}.${macMatch[2]}.${macMatch[3]}` : '15.1.0';
     }
-  } else if (platform === 'Linux') {
-    if (userAgent.includes('Android')) {
+  } else if (platform === 'Linux' || platform === 'Linux x86_64' || platform === 'Linux armv81') {
+    if (userAgent.includes('Android') || platform === 'Linux armv81') {
       chPlatform = 'Android';
-      const androidMatch = userAgent.match(/Android (\d+)/);
-      chPlatformVersion = androidMatch ? `${androidMatch[1]}.0.0` : '14.0.0';
+      const androidVer = osVersion?.match(/(\d+)/);
+      if (androidVer) {
+        chPlatformVersion = `${androidVer[1]}.0.0`;
+      } else {
+        const androidMatch = userAgent.match(/Android (\d+)/);
+        chPlatformVersion = androidMatch ? `${androidMatch[1]}.0.0` : '14.0.0';
+      }
       chMobile = true;
     } else {
       chPlatform = 'Linux';
-      chPlatformVersion = '6.5.0';
+      // Map Linux distro versions to kernel versions
+      if (osVersion?.includes('Ubuntu 24') || osVersion?.includes('Fedora 40')) {
+        chPlatformVersion = '6.8.0';
+      } else if (osVersion?.includes('Ubuntu 22') || osVersion?.includes('Fedora 39')) {
+        chPlatformVersion = '6.5.0';
+      } else if (osVersion?.includes('Ubuntu 20') || osVersion?.includes('Debian 11')) {
+        chPlatformVersion = '5.15.0';
+      } else if (osVersion?.includes('Debian 12')) {
+        chPlatformVersion = '6.1.0';
+      } else {
+        chPlatformVersion = '6.1.0';
+      }
     }
+  } else if (platform === 'iPhone') {
+    chPlatform = 'iOS';
+    const iosVer = osVersion?.match(/(\d+)/);
+    if (iosVer) {
+      chPlatformVersion = `${iosVer[1]}.0.0`;
+    } else {
+      const iosMatch = userAgent.match(/iPhone OS (\d+)/);
+      chPlatformVersion = iosMatch ? `${iosMatch[1]}.0.0` : '17.0.0';
+    }
+    chMobile = true;
   } else {
-    // Windows
+    // Windows — use osVersion to distinguish Win10 vs Win11
     chPlatform = 'Windows';
-    if (userAgent.includes('Windows NT 10.0')) {
+    if (osVersion?.includes('11')) {
       chPlatformVersion = '15.0.0';
-    } else if (userAgent.includes('Windows NT 6.3')) {
+    } else if (osVersion?.includes('10')) {
+      chPlatformVersion = '10.0.0';
+    } else if (osVersion?.includes('8') || userAgent.includes('Windows NT 6.3')) {
       chPlatformVersion = '6.3.0';
-    } else if (userAgent.includes('Windows NT 6.1')) {
+    } else if (osVersion?.includes('7') || userAgent.includes('Windows NT 6.1')) {
       chPlatformVersion = '6.1.0';
     } else {
-      chPlatformVersion = '15.0.0';
+      chPlatformVersion = '10.0.0';
     }
   }
 

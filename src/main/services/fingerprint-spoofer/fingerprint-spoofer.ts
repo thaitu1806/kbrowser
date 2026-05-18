@@ -143,6 +143,7 @@ export class FingerprintSpoofer {
       fingerprint.config.appVersion,
       fingerprint.config.platform,
       fingerprint.config.oscpu,
+      fingerprint.config.osVersion,
     );
 
     const fontListScript = generateFontListScript(fingerprint.config.fonts);

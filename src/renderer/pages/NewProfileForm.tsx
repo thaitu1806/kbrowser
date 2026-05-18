@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { FingerprintConfig, ProxyConfig } from '@shared/types';
 
 type TabId = 'general' | 'proxy' | 'platform' | 'fingerprint' | 'advanced';
 
@@ -458,7 +457,7 @@ const SCREEN_RESOLUTIONS = [
 
 export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewProfileFormProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
-  const [form, setForm] = useState<ProfileFormData>(defaultForm);
+  const [form, setForm] = useState<ProfileFormData>({ ...defaultForm });
   const [proxyCheckResult, setProxyCheckResult] = useState<{ status: string; message: string } | null>(null);
   const [proxyChecking, setProxyChecking] = useState(false);
   const [isEdit, setIsEdit] = useState(false);
@@ -500,7 +499,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
   useEffect(() => {
     if (!editProfileId) {
       setIsEdit(false);
-      setForm(defaultForm);
+      setForm({ ...defaultForm });
       setProxyCheckResult(null);
       setActiveTab('general');
       // Scroll back to top
@@ -526,8 +525,8 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         name: profile.name,
         browser: profile.browserType === 'firefox' ? 'firefox' : 'chromium',
         browserVersion: 'Auto',
-        os: fp?.platform === 'MacIntel' ? 'macos' : fp?.platform === 'Linux' ? 'linux' : 'windows',
-        osVersion: fp?.platform === 'MacIntel' ? 'All macOS' : fp?.platform === 'Linux' ? 'All Linux' : 'All Windows',
+        os: fp?.platform === 'MacIntel' ? 'macos' : fp?.platform === 'iPhone' ? 'ios' : fp?.platform === 'Linux armv81' ? 'android' : fp?.platform === 'Linux x86_64' || fp?.platform === 'Linux' ? 'linux' : 'windows',
+        osVersion: fp?.osVersion || (fp?.platform === 'MacIntel' ? 'All macOS' : fp?.platform === 'iPhone' ? 'All iOS' : fp?.platform === 'Linux armv81' ? 'All Android' : fp?.platform === 'Linux x86_64' || fp?.platform === 'Linux' ? 'All Linux' : 'All Windows'),
         userAgent: fp?.userAgent || prev.userAgent,
         canvasNoise: fp ? fp.canvas.noiseLevel > 0 : false,
         webglNoise: fp ? fp.webgl.noiseLevel > 0 : false,
@@ -715,10 +714,13 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           userAgent: form.userAgent,
           fonts: ['Arial', 'Helvetica', 'Times New Roman'],
           webrtc: form.webrtc === 'disabled' ? 'disable' as const : form.webrtc === 'forward' ? 'proxy' as const : 'real' as const,
-          platform: form.os === 'windows' ? 'Win32' : form.os === 'macos' ? 'MacIntel' : 'Linux',
+          platform: form.os === 'windows' ? 'Win32' : form.os === 'macos' ? 'MacIntel' : form.os === 'ios' ? 'iPhone' : form.os === 'android' ? 'Linux armv81' : 'Linux x86_64',
           appVersion: form.userAgent.replace('Mozilla/', ''),
           oscpu: getOscpu(form.os, form.osVersion, form.browser),
           screen: { width: screenWidth, height: screenHeight, colorDepth: 24 },
+          timezone: form.customTimezone || '',
+          locale: '',
+          osVersion: form.osVersion,
         },
         proxy: form.proxyType !== 'none' ? {
           protocol: form.proxyType as 'http' | 'https' | 'socks5',

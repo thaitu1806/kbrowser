@@ -413,28 +413,84 @@ export class ProfileManager {
     // Derive platform metadata from fpConfig for consistent spoofing
     // This maps the navigator.platform value to the correct Client Hints metadata
     const cfgPlatform = fpConfig?.platform || 'Win32';
+    const cfgOsVersion = fpConfig?.osVersion || ''; // e.g. 'Windows 10', 'macOS 26', 'Android 14'
     const isWindows = cfgPlatform === 'Win32' || cfgPlatform.includes('Win');
     const isMac = cfgPlatform === 'MacIntel' || cfgPlatform.includes('Mac');
-    const isLinux = cfgPlatform === 'Linux' || cfgPlatform.includes('Linux');
+    const isLinux = (cfgPlatform === 'Linux x86_64' || cfgPlatform === 'Linux') && !cfgPlatform.includes('armv');
+    const isAndroid = cfgPlatform === 'Linux armv81' || cfgPlatform.includes('armv');
+    const isIOS = cfgPlatform === 'iPhone' || cfgPlatform.includes('iPhone');
 
     // Client Hints platform name (different from navigator.platform)
-    const chPlatform = isMac ? 'macOS' : isLinux ? 'Linux' : 'Windows';
-    // Platform version for Client Hints — derive from User-Agent string
+    const chPlatform = isMac ? 'macOS' : isAndroid ? 'Android' : isIOS ? 'iOS' : isLinux ? 'Linux' : 'Windows';
+
+    // Platform version for Client Hints — use osVersion from config for accuracy
+    // This is critical because BrowserScan compares platformVersion with UA and detects mismatches
     let chPlatformVersion = '10.0.0';
     if (isMac) {
-      // Parse from UA: "Mac OS X 26_1_0" → "26.1.0"
-      const macVerMatch = effectiveUserAgent.match(/Mac OS X (\d+)[_.](\d+)[_.](\d+)/);
-      chPlatformVersion = macVerMatch ? `${macVerMatch[1]}.${macVerMatch[2]}.${macVerMatch[3]}` : '15.1.0';
+      // Use osVersion config first, fallback to parsing UA
+      const macVer = cfgOsVersion.match(/(\d+)/);
+      if (macVer) {
+        chPlatformVersion = `${macVer[1]}.1.0`;
+      } else {
+        const macVerMatch = effectiveUserAgent.match(/Mac OS X (\d+)[_.](\d+)[_.](\d+)/);
+        chPlatformVersion = macVerMatch ? `${macVerMatch[1]}.${macVerMatch[2]}.${macVerMatch[3]}` : '15.1.0';
+      }
+    } else if (isAndroid) {
+      // Use osVersion config first, fallback to parsing UA
+      const androidVer = cfgOsVersion.match(/(\d+)/);
+      if (androidVer) {
+        chPlatformVersion = `${androidVer[1]}.0.0`;
+      } else {
+        const androidMatch = effectiveUserAgent.match(/Android (\d+)/);
+        chPlatformVersion = androidMatch ? `${androidMatch[1]}.0.0` : '14.0.0';
+      }
+    } else if (isIOS) {
+      // Use osVersion config first, fallback to parsing UA
+      const iosVer = cfgOsVersion.match(/(\d+)/);
+      if (iosVer) {
+        chPlatformVersion = `${iosVer[1]}.0.0`;
+      } else {
+        const iosMatch = effectiveUserAgent.match(/iPhone OS (\d+)/);
+        chPlatformVersion = iosMatch ? `${iosMatch[1]}.0.0` : '17.0.0';
+      }
     } else if (isLinux) {
-      chPlatformVersion = '6.1.0';
-    } else {
-      // Windows: NT 10.0 → platformVersion 15.0.0 (Win11) or 10.0.0 (Win10)
-      chPlatformVersion = effectiveUserAgent.includes('Windows NT 10.0') ? '15.0.0' : '10.0.0';
+      // Linux kernel version — use osVersion to derive a realistic kernel version
+      const linuxVer = cfgOsVersion.match(/(\d+)/);
+      if (cfgOsVersion.includes('Ubuntu 24') || cfgOsVersion.includes('Fedora 40')) {
+        chPlatformVersion = '6.8.0';
+      } else if (cfgOsVersion.includes('Ubuntu 22') || cfgOsVersion.includes('Fedora 39')) {
+        chPlatformVersion = '6.5.0';
+      } else if (cfgOsVersion.includes('Ubuntu 20') || cfgOsVersion.includes('Debian 11')) {
+        chPlatformVersion = '5.15.0';
+      } else if (cfgOsVersion.includes('Debian 12')) {
+        chPlatformVersion = '6.1.0';
+      } else {
+        chPlatformVersion = '6.1.0';
+      }
+    } else if (isWindows) {
+      // Use osVersion from config to correctly distinguish Win versions
+      // Also fallback to UA string for profiles created before osVersion field was added
+      if (cfgOsVersion.includes('11')) {
+        chPlatformVersion = '15.0.0'; // Windows 11
+      } else if (cfgOsVersion.includes('10')) {
+        chPlatformVersion = '10.0.0'; // Windows 10
+      } else if (cfgOsVersion.includes('8') || effectiveUserAgent.includes('Windows NT 6.3')) {
+        chPlatformVersion = '6.3.0'; // Windows 8/8.1
+      } else if (cfgOsVersion.includes('7') || effectiveUserAgent.includes('Windows NT 6.1')) {
+        chPlatformVersion = '6.1.0'; // Windows 7
+      } else if (effectiveUserAgent.includes('Windows NT 10.0')) {
+        // UA says NT 10.0 but no osVersion set — default to Win10
+        chPlatformVersion = '10.0.0';
+      } else {
+        chPlatformVersion = '10.0.0';
+      }
     }
     // Architecture
-    const chArchitecture = isMac ? 'arm' : 'x86';
+    const chArchitecture = isMac ? 'arm' : isAndroid ? 'arm' : isIOS ? 'arm' : 'x86';
     // Bitness
-    const chBitness = '64';
+    const chBitness = isAndroid || isIOS ? '32' : '64';
+    // Mobile
+    const chMobile = isAndroid || isIOS;
 
     // Apply the kernel-matched UA immediately via CDP on the first page
     try {
@@ -461,13 +517,14 @@ export class ProfileManager {
             platformVersion: chPlatformVersion,
             architecture: chArchitecture,
             model: '',
-            mobile: false,
+            mobile: chMobile,
             bitness: chBitness,
             wow64: false,
           },
         });
         await fixCdp.detach();
         console.log(`[UA] Applied kernel-matched UA via CDP`);
+        console.log(`[Platform] chPlatform=${chPlatform}, chPlatformVersion=${chPlatformVersion}, cfgOsVersion=${cfgOsVersion}, cfgPlatform=${cfgPlatform}`);
       }
     } catch {
       // CDP might not be available yet — the main CDP injection below will handle it
@@ -485,20 +542,22 @@ export class ProfileManager {
     await context.route('**/*', (route) => {
       const headers = { ...route.request().headers() };
       headers['accept-language'] = acceptLangHeader;
-      // Override Sec-CH-UA headers to match kernel version and platform
-      if (headers['sec-ch-ua']) {
-        headers['sec-ch-ua'] = secChUaHeader;
-      }
-      if (headers['sec-ch-ua-full-version-list']) {
-        headers['sec-ch-ua-full-version-list'] = secChUaFullHeader;
-      }
+      // Override ALL Sec-CH-UA headers unconditionally — BrowserScan reads these from HTTP headers
+      // Chrome sends real machine values by default; we MUST override them in every request
+      headers['sec-ch-ua'] = secChUaHeader;
+      headers['sec-ch-ua-full-version-list'] = secChUaFullHeader;
       // Override Sec-CH-UA-Platform to match configured OS
       headers['sec-ch-ua-platform'] = `"${chPlatform}"`;
-      // Override Sec-CH-UA-Platform-Version — always set when present, and also set for
-      // BrowserScan-like sites that request high-entropy hints via Accept-CH
-      if (headers['sec-ch-ua-platform-version']) {
-        headers['sec-ch-ua-platform-version'] = `"${chPlatformVersion}"`;
-      }
+      // Override Sec-CH-UA-Mobile to match configured OS
+      headers['sec-ch-ua-mobile'] = chMobile ? '?1' : '?0';
+      // ALWAYS set platform-version — this is the key header BrowserScan uses to detect real OS
+      // Chrome sends the REAL Windows version here; we must override it unconditionally
+      headers['sec-ch-ua-platform-version'] = `"${chPlatformVersion}"`;
+      // Also override other high-entropy hints that might leak real machine info
+      headers['sec-ch-ua-arch'] = `"${chArchitecture}"`;
+      headers['sec-ch-ua-bitness'] = `"${chBitness}"`;
+      headers['sec-ch-ua-model'] = '""';
+      headers['sec-ch-ua-wow64'] = '?0';
       // Ensure User-Agent header matches
       if (effectiveUserAgent) {
         headers['user-agent'] = effectiveUserAgent;
@@ -612,7 +671,7 @@ export class ProfileManager {
         try {
           var SPOOF_UA = ${JSON.stringify(effectiveUserAgent)};
           var SPOOF_PLATFORM = ${JSON.stringify(fpConfig?.platform || 'Win32')};
-          var SPOOF_APPVERSION = ${JSON.stringify(fpConfig?.appVersion || '5.0 (Windows NT 10.0; Win64; x64)')};
+          var SPOOF_APPVERSION = ${JSON.stringify(effectiveUserAgent ? effectiveUserAgent.replace('Mozilla/', '') : (fpConfig?.appVersion || '5.0 (Windows NT 10.0; Win64; x64)'))};
           var SPOOF_OSCPU = ${JSON.stringify(fpConfig?.oscpu || '')};
 
           var uaDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
@@ -792,6 +851,42 @@ export class ProfileManager {
               Object.freeze({ brand: 'Not-A.Brand', version: '24' }),
             ]);
 
+            var spoofedHEV = {
+              brands: spoofedBrands,
+              mobile: ${chMobile},
+              platform: '${chPlatform}',
+              platformVersion: '${chPlatformVersion}',
+              architecture: '${chArchitecture}',
+              bitness: '${chBitness}',
+              model: '',
+              uaFullVersion: '${chromeFullVersion}',
+              fullVersionList: [
+                { brand: 'Google Chrome', version: '${chromeFullVersion}' },
+                { brand: 'Chromium', version: '${chromeFullVersion}' },
+                { brand: 'Not-A.Brand', version: '24.0.0.0' },
+              ],
+              wow64: false,
+            };
+
+            // Override getHighEntropyValues on PROTOTYPE first — catches all access patterns
+            // This is critical because BrowserScan may call it before instance override takes effect
+            try {
+              var UADataProto = Object.getPrototypeOf(uaData);
+              if (UADataProto && UADataProto.getHighEntropyValues) {
+                var origProtoGetHEV = UADataProto.getHighEntropyValues;
+                Object.defineProperty(UADataProto, 'getHighEntropyValues', {
+                  value: function getHighEntropyValues(hints) {
+                    return Promise.resolve(spoofedHEV);
+                  },
+                  writable: true, configurable: true, enumerable: true
+                });
+                // Make toString look native
+                UADataProto.getHighEntropyValues.toString = function() {
+                  return 'function getHighEntropyValues() { [native code] }';
+                };
+              }
+            } catch(e) {}
+
             // Override 'brands' getter on the instance
             Object.defineProperty(uaData, 'brands', {
               get: function() { return spoofedBrands; },
@@ -800,7 +895,7 @@ export class ProfileManager {
 
             // Override 'mobile' getter on the instance
             Object.defineProperty(uaData, 'mobile', {
-              get: function() { return false; },
+              get: function() { return ${chMobile}; },
               configurable: true, enumerable: true
             });
 
@@ -810,26 +905,10 @@ export class ProfileManager {
               configurable: true, enumerable: true
             });
 
-            // Override getHighEntropyValues — must return a Promise like the native one
-            var origGetHEV = uaData.getHighEntropyValues;
+            // Override getHighEntropyValues on instance too — belt and suspenders
             Object.defineProperty(uaData, 'getHighEntropyValues', {
               value: function getHighEntropyValues(hints) {
-                return Promise.resolve({
-                  brands: spoofedBrands,
-                  mobile: false,
-                  platform: '${chPlatform}',
-                  platformVersion: '${chPlatformVersion}',
-                  architecture: '${chArchitecture}',
-                  bitness: '${chBitness}',
-                  model: '',
-                  uaFullVersion: '${chromeFullVersion}',
-                  fullVersionList: [
-                    { brand: 'Google Chrome', version: '${chromeFullVersion}' },
-                    { brand: 'Chromium', version: '${chromeFullVersion}' },
-                    { brand: 'Not-A.Brand', version: '24.0.0.0' },
-                  ],
-                  wow64: false,
-                });
+                return Promise.resolve(spoofedHEV);
               },
               writable: true, configurable: true, enumerable: true
             });
@@ -837,7 +916,7 @@ export class ProfileManager {
             // Override toJSON to match native behavior
             Object.defineProperty(uaData, 'toJSON', {
               value: function toJSON() {
-                return { brands: spoofedBrands, mobile: false, platform: '${chPlatform}' };
+                return { brands: spoofedBrands, mobile: ${chMobile}, platform: '${chPlatform}' };
               },
               writable: true, configurable: true, enumerable: true
             });
@@ -899,7 +978,7 @@ export class ProfileManager {
           platformVersion: chPlatformVersion,
           architecture: chArchitecture,
           model: '',
-          mobile: false,
+          mobile: chMobile,
           bitness: chBitness,
           wow64: false,
         },
@@ -923,7 +1002,7 @@ export class ProfileManager {
           width: screenW2,
           height: screenH2,
           deviceScaleFactor: 1,
-          mobile: false,
+          mobile: chMobile,
           screenWidth: screenW2,
           screenHeight: screenH2,
           screenOrientation: { type: 'landscapePrimary', angle: 0 },
@@ -1163,6 +1242,43 @@ export class ProfileManager {
     // Also save cookies when any page navigates (captures login cookies immediately)
     context.on('page', (page) => {
       page.on('load', () => { saveCookies(); });
+      // CRITICAL: Apply CDP Emulation.setUserAgentOverride to EVERY new page
+      // This ensures Client Hints HTTP headers are spoofed for all tabs, not just the first one
+      // Without this, new tabs send REAL machine info (e.g., real Windows 11 version)
+      (async () => {
+        try {
+          const pageCdp = await context.newCDPSession(page);
+          await pageCdp.send('Emulation.setUserAgentOverride', {
+            userAgent: effectiveUserAgent,
+            platform: fpConfig?.platform || 'Win32',
+            userAgentMetadata: {
+              brands: [
+                { brand: 'Google Chrome', version: chromeMajorVersion },
+                { brand: 'Chromium', version: chromeMajorVersion },
+                { brand: 'Not-A.Brand', version: '24' },
+              ],
+              fullVersionList: [
+                { brand: 'Google Chrome', version: chromeFullVersion },
+                { brand: 'Chromium', version: chromeFullVersion },
+                { brand: 'Not-A.Brand', version: '24.0.0.0' },
+              ],
+              fullVersion: chromeFullVersion,
+              platform: chPlatform,
+              platformVersion: chPlatformVersion,
+              architecture: chArchitecture,
+              model: '',
+              mobile: chMobile,
+              bitness: chBitness,
+              wow64: false,
+            },
+          });
+          // Disable Runtime to prevent consoleAPICalled leak
+          try { await pageCdp.send('Runtime.disable'); } catch { /* ignore */ }
+          // Keep session alive — don't detach (Emulation override is session-scoped)
+        } catch {
+          // CDP might fail for some pages (e.g., chrome:// pages) — that's ok
+        }
+      })();
     });
     // Save for existing pages too
     for (const page of context.pages()) {

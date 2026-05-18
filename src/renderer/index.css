@@ -1177,12 +1177,15 @@ tr:hover { background: #f8faff; }
   display: flex;
   flex: 1;
   overflow: hidden;
+  min-height: 0;
+  position: relative;
 }
 
 .npf-content-wrapper > .npf-content {
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
+  min-height: 0;
 }
 
 .npf-overview-sticky {

@@ -9,12 +9,15 @@ const defaultFingerprint: FingerprintConfig = {
   audioContext: { frequencyOffset: 0.01 },
   cpu: { cores: 4 },
   ram: { sizeGB: 8 },
-  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.80 Safari/537.36',
   fonts: ['Arial', 'Helvetica', 'Times New Roman'],
   webrtc: 'proxy',
   platform: 'Win32',
-  appVersion: '5.0 (Windows NT 10.0; Win64; x64)',
-  oscpu: 'Windows NT 10.0; Win64; x64',
+  appVersion: '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.80 Safari/537.36',
+  oscpu: '',
+  timezone: '',
+  locale: '',
+  screen: { width: 1920, height: 1080, colorDepth: 24 },
 };
 
 export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroupFilter }: { onNewProfile?: () => void; onEditProfile?: (id: string) => void; initialGroupFilter?: string | null }) {
@@ -437,19 +440,21 @@ function ProfileMenu({ profileId, onDelete, onEdit }: { profileId: string; onDel
     setOpen(false);
     try {
       if (api) {
-        // Get full profile, create a copy with new name
-        const profiles = await api.listProfiles();
-        const original = profiles.find((p) => p.id === profileId);
-        if (!original) return;
+        // Get full profile with fingerprint config to copy correctly
+        const fullProfile = await api.getProfile(profileId);
+        if (!fullProfile) return;
+        const fp = fullProfile.fingerprintConfig;
         await api.createProfile({
-          name: `${original.name} (copy)`,
-          browserType: original.browserType,
-          fingerprint: {
+          name: `${fullProfile.name} (copy)`,
+          browserType: fullProfile.browserType,
+          fingerprint: fp || {
             canvas: { noiseLevel: 0.5 }, webgl: { noiseLevel: 0.5 },
             audioContext: { frequencyOffset: 0.01 }, cpu: { cores: 4 }, ram: { sizeGB: 8 },
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            fonts: ['Arial'], webrtc: 'disable', platform: 'Win32',
-            appVersion: '5.0', oscpu: 'Windows NT 10.0',
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.80 Safari/537.36',
+            fonts: ['Arial', 'Helvetica', 'Times New Roman'], webrtc: 'disable', platform: 'Win32',
+            appVersion: '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.7680.80 Safari/537.36',
+            oscpu: '',
+            screen: { width: 1920, height: 1080, colorDepth: 24 },
           },
         });
         window.location.reload();
