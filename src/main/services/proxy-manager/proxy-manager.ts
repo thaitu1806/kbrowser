@@ -334,7 +334,18 @@ export class ProxyManager {
     }
 
     // Check the proxy health
-    const checkResult = await this.checkProxy(proxy.id);
+    const checkResult = await this.checkerFn({
+      protocol: proxy.protocol as ProxyConfig['protocol'],
+      host: proxy.host,
+      port: proxy.port,
+      username: proxy.username,
+      password: proxy.password,
+    });
+
+    // Update the proxy record in the database with status
+    this.db.prepare(
+      'UPDATE proxies SET status = ?, response_time_ms = ?, last_checked_at = ? WHERE id = ?',
+    ).run(checkResult.status, checkResult.responseTimeMs, checkResult.checkedAt, proxy.id);
 
     if (checkResult.status === 'alive') {
       return {
@@ -349,5 +360,20 @@ export class ProxyManager {
       proxy,
       message: `Proxy ${proxy.host}:${proxy.port} is not responding. Choose an alternative proxy or launch without proxy.`,
     };
+  }
+
+  /**
+   * Checks proxy and updates checked_ip in database.
+   * Called when opening a profile to get the real IP.
+   */
+  async checkAndUpdateIp(profileId: string, checkResult: { ip?: string; country?: string }): Promise<void> {
+    const row = this.db.prepare('SELECT proxy_id FROM profiles WHERE id = ?').get(profileId) as { proxy_id: string | null } | undefined;
+    if (row?.proxy_id && checkResult.ip) {
+      this.db.prepare('UPDATE proxies SET checked_ip = ?, country = ? WHERE id = ?').run(
+        checkResult.ip,
+        checkResult.country || null,
+        row.proxy_id,
+      );
+    }
   }
 }

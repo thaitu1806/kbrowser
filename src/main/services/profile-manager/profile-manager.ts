@@ -1710,17 +1710,22 @@ function openAll(){
     // Handle proxy assignment: save proxy to proxies table and link to profile
     if (config.proxy !== undefined) {
       if (config.proxy) {
+        const proxyData = config.proxy as unknown as Record<string, unknown>;
+        const checkedIp = (proxyData.checkedIp as string) || null;
+        const country = (proxyData.country as string) || null;
         // Check if profile already has a proxy assigned
         if (row.proxy_id) {
-          // Update existing proxy record
+          // Update existing proxy record including checked_ip
           this.db.prepare(
-            `UPDATE proxies SET protocol = ?, host = ?, port = ?, username = ?, password = ? WHERE id = ?`
+            `UPDATE proxies SET protocol = ?, host = ?, port = ?, username = ?, password = ?, checked_ip = ?, country = ? WHERE id = ?`
           ).run(
             config.proxy.protocol,
             config.proxy.host,
             config.proxy.port,
             config.proxy.username || null,
             config.proxy.password || null,
+            checkedIp,
+            country,
             row.proxy_id,
           );
         } else {
@@ -1728,8 +1733,8 @@ function openAll(){
           const crypto = require('crypto');
           const proxyId = crypto.randomUUID();
           this.db.prepare(
-            `INSERT INTO proxies (id, protocol, host, port, username, password, status, last_checked_at)
-             VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`
+            `INSERT INTO proxies (id, protocol, host, port, username, password, status, last_checked_at, checked_ip, country)
+             VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)`
           ).run(
             proxyId,
             config.proxy.protocol,
@@ -1737,6 +1742,8 @@ function openAll(){
             config.proxy.port,
             config.proxy.username || null,
             config.proxy.password || null,
+            checkedIp,
+            country,
           );
           updates.push('proxy_id = ?');
           params.push(proxyId);

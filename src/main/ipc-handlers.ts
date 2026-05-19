@@ -605,6 +605,10 @@ export function setupIPC(): { profileManager: ProfileManager } {
     return proxyManager.validateProxyBeforeLaunch(profileId);
   });
 
+  ipcMain.handle('proxy:updateCheckedIp', async (_event, profileId: string, ip: string, country: string) => {
+    proxyManager.checkAndUpdateIp(profileId, { ip, country });
+  });
+
   // ─── Fingerprint handlers ───
   ipcMain.handle('fingerprint:generate', async (_event, config) => {
     return fingerprintSpoofer.generateFingerprint(config);

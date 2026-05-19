@@ -114,7 +114,7 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
       setOpeningId(id);
       setOpenStatus('Checking proxy...');
       if (api) {
-        // Check proxy before opening
+        // Check proxy before opening and get IP
         const validation = await api.validateProxy(id);
         if (validation.status === 'dead') {
           const proceed = confirm(
@@ -126,6 +126,23 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
             return;
           }
         }
+
+        // If proxy is alive, do a full check to get IP and update database
+        if (validation.status === 'ready' && validation.proxy) {
+          try {
+            const checkResult = await api.checkProxyDirect({
+              protocol: validation.proxy.protocol,
+              host: validation.proxy.host,
+              port: validation.proxy.port,
+              username: validation.proxy.username,
+              password: validation.proxy.password,
+            });
+            if (checkResult.success && checkResult.ip) {
+              await api.updateCheckedIp(id, checkResult.ip, checkResult.country || '');
+            }
+          } catch { /* ignore IP check errors */ }
+        }
+
         setOpenStatus('Starting browser...');
         await api.openProfile(id);
         await loadProfiles();

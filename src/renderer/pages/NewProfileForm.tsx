@@ -739,13 +739,10 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
       if (api) {
         let profileId: string | undefined;
         if (isEdit && editProfileId) {
-          await api.updateProfile(editProfileId, config);
+          // Pass checkedIp and country along with proxy config for updateProfile to save
+          const proxyWithIp = config.proxy ? { ...config.proxy, checkedIp, country: checkedCountry } : undefined;
+          await api.updateProfile(editProfileId, { ...config, proxy: proxyWithIp });
           profileId = editProfileId;
-          // Also update proxy if changed
-          if (config.proxy && config.proxy.host) {
-            const proxy = await api.addProxy({ ...config.proxy, checkedIp, country: checkedCountry });
-            await api.assignProxy(proxy.id, editProfileId);
-          }
         } else {
           const profile = await api.createProfile(config);
           profileId = profile.id;

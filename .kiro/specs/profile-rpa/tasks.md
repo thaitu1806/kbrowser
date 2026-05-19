@@ -130,35 +130,35 @@ This plan implements the RPA Orchestrator module — a new service that bridges 
     - **Property 4: Ordered execution bảo toàn thứ tự**
     - For any profile list with execution_order='ordered', execution order matches input order
     - **Validates: Requirements 2.2**
-  - [~] 8.6 Write property test for random execution coverage
+  - [ ] 8.6 Write property test for random execution coverage
     - **Property 5: Random execution bao phủ tất cả hồ sơ**
     - For any profile list with execution_order='random', all profiles are executed exactly once
     - **Validates: Requirements 2.3, 4.3**
-  - [~] 8.7 Write property test for batch fault isolation
+  - [ ] 8.7 Write property test for batch fault isolation
     - **Property 11: Batch fault isolation**
     - For any batch where M of K profiles fail, K-M profiles still succeed
     - **Validates: Requirements 4.4**
-  - [~] 8.8 Write property test for batch report accuracy
+  - [ ] 8.8 Write property test for batch report accuracy
     - **Property 12: Batch report accuracy**
     - For any completed batch, successCount + failureCount = totalProfiles and errors.length = failureCount
     - **Validates: Requirements 4.5**
-  - [~] 8.9 Write property test for auto-progression
+  - [ ] 8.9 Write property test for auto-progression
     - **Property 8: Auto-progression — task tiếp theo tự động bắt đầu**
     - For any queue with a running task and pending tasks, when running task completes, next pending task starts
     - **Validates: Requirements 3.3**
-  - [~] 8.10 Write property test for common task single execution
+  - [ ] 8.10 Write property test for common task single execution
     - **Property 20: Common task chỉ thực thi một lần**
     - For any common task that completes, it never transitions back to running
     - **Validates: Requirements 2.6**
-  - [~] 8.11 Write property test for stop-all cancellation
+  - [ ] 8.11 Write property test for stop-all cancellation
     - **Property 16: Stop-all cancels running and pending**
     - For any profile with N tasks, cancelAllForProfile sets all to cancelled
     - **Validates: Requirements 7.2**
-  - [~] 8.12 Write property test for after-task-action quitBrowser
+  - [ ] 8.12 Write property test for after-task-action quitBrowser
     - **Property 17: After-task-action quitBrowser đóng hồ sơ**
     - For any task with afterTaskAction='quitBrowser', after completion the profile is closed
     - **Validates: Requirements 7.5**
-  - [~] 8.13 Write property test for execution history round-trip
+  - [ ] 8.13 Write property test for execution history round-trip
     - **Property 15: Execution history round-trip**
     - For any completed/failed task, querying history returns it with full details
     - **Validates: Requirements 6.3, 6.4**
@@ -174,7 +174,7 @@ This plan implements the RPA Orchestrator module — a new service that bridges 
   - [x] 10.2 Expose IPC channels in preload script
     - Add RPA orchestrator IPC channel definitions to `src/main/preload.ts`
     - _Requirements: 7.1_
-  - [~] 10.3 Write integration tests for IPC handlers
+  - [ ] 10.3 Write integration tests for IPC handlers
     - Test full flow: create task via IPC → verify task in DB → execute → verify completion event
     - _Requirements: 1.2, 4.1, 6.1_
 
@@ -189,23 +189,23 @@ This plan implements the RPA Orchestrator module — a new service that bridges 
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 13. Implement frontend RPA Dialog component
-  - [~] 13.1 Create RPA Dialog React component
+  - [ ] 13.1 Create RPA Dialog React component
     - Create dialog component for configuring RPA execution on a profile
     - Include: script selection dropdown, execution order toggle (ordered/random), task type toggle (common/scheduled), priority checkbox
     - Show schedule config (cron expression, start/end time) when task type is 'scheduled'
     - Auto-populate from saved profile config via `rpa-orchestrator:get-config` IPC
     - On submit: call `rpa-orchestrator:create-task` or `rpa-orchestrator:batch-execute` IPC
     - _Requirements: 1.1, 2.1, 2.4, 5.1, 7.1, 8.2_
-  - [~] 13.2 Add RPA status indicators to profile list
+  - [ ] 13.2 Add RPA status indicators to profile list
     - Show RPA status icon on each profile row: idle, running, pending, completed, failed
     - Listen to `rpa-orchestrator:task-progress` IPC events for real-time updates
     - _Requirements: 6.2, 7.3_
-  - [~] 13.3 Create RPA Status Panel component
+  - [ ] 13.3 Create RPA Status Panel component
     - Show real-time progress: current action, actions completed/total, elapsed time
     - Show queue status: number of pending tasks for the profile
     - Add stop button that calls `rpa-orchestrator:cancel-all` IPC
     - _Requirements: 6.1, 6.2, 7.2_
-  - [~] 13.4 Create RPA History view for a profile
+  - [ ] 13.4 Create RPA History view for a profile
     - Display list of past task executions with status, duration, error details
     - Fetch via `rpa-orchestrator:get-history` IPC
     - _Requirements: 6.3, 6.4, 6.5_

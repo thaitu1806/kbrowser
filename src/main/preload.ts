@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateProxyStatus: (proxyId: string, status: string, responseTimeMs: number) => ipcRenderer.invoke('proxy:updateStatus', proxyId, status, responseTimeMs),
   assignProxy: (proxyId: string, profileId: string) => ipcRenderer.invoke('proxy:assign', proxyId, profileId),
   validateProxy: (profileId: string) => ipcRenderer.invoke('proxy:validate', profileId),
+  updateCheckedIp: (profileId: string, ip: string, country: string) => ipcRenderer.invoke('proxy:updateCheckedIp', profileId, ip, country),
 
   // ─── Fingerprint ───
   generateFingerprint: (config: unknown) => ipcRenderer.invoke('fingerprint:generate', config),
