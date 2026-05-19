@@ -1317,34 +1317,34 @@ export class ProfileManager {
 <title>🛡️ Ken\\'s Browser IM — Fingerprint Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:0;min-width:0}
-.ip-banner{background:linear-gradient(135deg,#4a6cf7 0%,#2d4ed8 100%);color:#fff;padding:36px 24px;text-align:center;position:relative;overflow:hidden;width:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:0}
+.ip-banner{background:linear-gradient(135deg,#4a6cf7 0%,#2d4ed8 100%);color:#fff;padding:30px 20px;text-align:center;position:relative;overflow:hidden;width:100%}
 .ip-banner::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");pointer-events:none}
-.ip-banner .ip-icon{font-size:28px;margin-bottom:8px;position:relative}
-.ip-banner .ip-value{font-size:28px;font-weight:700;font-family:'SF Mono',Consolas,monospace;letter-spacing:0.5px;display:flex;align-items:center;justify-content:center;gap:12px;position:relative;flex-wrap:wrap}
-.ip-banner .ip-copy{background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px;transition:background .15s}
+.ip-banner .ip-icon{font-size:26px;margin-bottom:6px;position:relative}
+.ip-banner .ip-value{font-size:26px;font-weight:700;font-family:'SF Mono',Consolas,monospace;display:flex;align-items:center;justify-content:center;gap:10px;position:relative}
+.ip-banner .ip-copy{background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:14px;transition:background .15s}
 .ip-banner .ip-copy:hover{background:rgba(255,255,255,0.4)}
-.ip-banner .ip-location{font-size:13px;color:rgba(255,255,255,0.8);margin-top:6px;position:relative}
-.ip-banner .ip-loading{font-size:16px;color:rgba(255,255,255,0.7)}
-.content{padding:20px;max-width:1200px;margin:0 auto}
-.header{text-align:center;padding:0 0 16px}
-.header h1{font-size:18px;color:#4a6cf7}
-.header p{color:#6b7b8d;font-size:12px;margin-top:4px}
-.info{background:#fff;border-radius:10px;padding:14px 16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;font-size:12px;overflow:hidden}
+.ip-banner .ip-location{font-size:13px;color:rgba(255,255,255,0.8);margin-top:5px;position:relative}
+.ip-banner .ip-loading{font-size:15px;color:rgba(255,255,255,0.7)}
+.content{padding:16px 20px;width:960px;margin:0 auto}
+.header{text-align:center;padding:0 0 12px}
+.header h1{font-size:17px;color:#4a6cf7}
+.header p{color:#6b7b8d;font-size:12px;margin-top:3px}
+.info{background:#fff;border-radius:8px;padding:12px 16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.08);display:grid;grid-template-columns:repeat(8,1fr);gap:10px;font-size:11px;overflow:hidden}
 .info .item{display:flex;flex-direction:column;gap:2px;min-width:0}
 .info .label{font-size:10px;color:#6b7b8d;white-space:nowrap}
-.info .val{font-family:'SF Mono',Consolas,monospace;font-size:11px;word-break:break-all;overflow:hidden;text-overflow:ellipsis}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px}
-.section-title{font-size:13px;font-weight:600;color:#4a6cf7;margin:16px 0 8px;display:flex;align-items:center;gap:6px}
-.card{background:#fff;border-radius:8px;padding:12px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:10px}
+.info .val{font-family:'SF Mono',Consolas,monospace;font-size:10px;word-break:break-all;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.info .item:first-child{grid-column:span 2}
+.info .item:first-child .val{white-space:normal}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.section-title{font-size:12px;font-weight:600;color:#4a6cf7;margin:14px 0 8px;display:flex;align-items:center;gap:6px}
+.card{background:#fff;border-radius:8px;padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:all .15s;border:1px solid transparent;display:flex;align-items:center;gap:10px}
 .card:hover{border-color:#4a6cf7;transform:translateY(-1px);box-shadow:0 4px 12px rgba(74,108,247,.15)}
-.card .icon{font-size:20px;flex-shrink:0}
-.card .text h3{font-size:12px;font-weight:600;margin-bottom:1px}
+.card .icon{font-size:18px;flex-shrink:0}
+.card .text h3{font-size:11px;font-weight:600;margin-bottom:1px}
 .card .text p{font-size:10px;color:#6b7b8d}
-.btn-open-all{background:#4a6cf7;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer;margin:16px auto;display:block}
+.btn-open-all{background:#4a6cf7;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-size:12px;font-weight:600;cursor:pointer;margin:14px auto;display:block}
 .btn-open-all:hover{background:#3b5de7}
-@media(max-width:768px){.ip-banner .ip-value{font-size:20px}.grid{grid-template-columns:1fr 1fr}.info{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}}
-@media(max-width:480px){.grid{grid-template-columns:1fr}.ip-banner .ip-value{font-size:16px}}
 </style>
 </head>
 <body>
