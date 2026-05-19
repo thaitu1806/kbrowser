@@ -110,8 +110,8 @@ export class ProxyManager {
     const proxyId = crypto.randomUUID();
 
     this.db.prepare(`
-      INSERT INTO proxies (id, protocol, host, port, username, password, status, response_time_ms, last_checked_at)
-      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
+      INSERT INTO proxies (id, protocol, host, port, username, password, status, response_time_ms, last_checked_at, checked_ip, country)
+      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
     `).run(
       proxyId,
       config.protocol,
@@ -119,6 +119,8 @@ export class ProxyManager {
       config.port,
       config.username ?? null,
       config.password ?? null,
+      (config as unknown as Record<string, unknown>).checkedIp ?? null,
+      (config as unknown as Record<string, unknown>).country ?? null,
     );
 
     const proxy: Proxy = {

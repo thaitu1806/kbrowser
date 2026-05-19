@@ -305,7 +305,7 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
               </th>
               <th className="col-group">Group</th>
               <th className="col-name">Name ↕</th>
-              <th className="col-ip">Proxy</th>
+              <th className="col-ip">IP</th>
               <th className="col-lastop">Last opened</th>
               <th className="col-platform">Browser</th>
               <th className="col-tags">Tags</th>
@@ -346,9 +346,14 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
                 <td className="col-ip">
                   <div className="ip-cell">
                     {profile.proxyAssigned ? (
-                      <span className="ip-address">{profile.proxyAssigned}</span>
+                      <div className="ip-info">
+                        <span className="ip-address">🔗 {profile.proxyAssigned.split('\n')[0]}</span>
+                        {profile.proxyAssigned.includes('\n') && (
+                          <span className="ip-country">{profile.proxyAssigned.split('\n')[1]}</span>
+                        )}
+                      </div>
                     ) : (
-                      <span className="no-proxy">No proxy</span>
+                      <span className="no-proxy">—</span>
                     )}
                   </div>
                 </td>

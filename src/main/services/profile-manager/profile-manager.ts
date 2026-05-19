@@ -1618,7 +1618,13 @@ function openAll(){
    */
   async listDeletedProfiles(): Promise<ProfileSummary[]> {
     const rows = this.db
-      .prepare('SELECT id, name, status, browser_type, proxy_id, last_used_at FROM profiles WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC')
+      .prepare(`
+        SELECT p.id, p.name, p.status, p.browser_type, p.proxy_id, p.last_used_at,
+               pr.host AS proxy_host, pr.port AS proxy_port
+        FROM profiles p
+        LEFT JOIN proxies pr ON p.proxy_id = pr.id
+        WHERE p.deleted_at IS NOT NULL ORDER BY p.deleted_at DESC
+      `)
       .all() as Array<{
         id: string;
         name: string;
@@ -1626,6 +1632,8 @@ function openAll(){
         browser_type: string;
         proxy_id: string | null;
         last_used_at: string | null;
+        proxy_host: string | null;
+        proxy_port: number | null;
       }>;
 
     return rows.map((row) => ({
@@ -1633,7 +1641,7 @@ function openAll(){
       name: row.name,
       status: row.status as 'open' | 'closed',
       browserType: row.browser_type as 'chromium' | 'firefox',
-      proxyAssigned: row.proxy_id,
+      proxyAssigned: row.proxy_host ? `${row.proxy_host}:${row.proxy_port}` : null,
       lastUsedAt: row.last_used_at,
     }));
   }
@@ -1799,7 +1807,14 @@ function openAll(){
    */
   async listProfiles(): Promise<ProfileSummary[]> {
     const rows = this.db
-      .prepare('SELECT id, name, status, browser_type, proxy_id, last_used_at FROM profiles WHERE deleted_at IS NULL')
+      .prepare(`
+        SELECT p.id, p.name, p.status, p.browser_type, p.proxy_id, p.last_used_at,
+               pr.host AS proxy_host, pr.port AS proxy_port, pr.protocol AS proxy_protocol,
+               pr.checked_ip AS proxy_checked_ip, pr.country AS proxy_country
+        FROM profiles p
+        LEFT JOIN proxies pr ON p.proxy_id = pr.id
+        WHERE p.deleted_at IS NULL
+      `)
       .all() as Array<{
         id: string;
         name: string;
@@ -1807,6 +1822,11 @@ function openAll(){
         browser_type: string;
         proxy_id: string | null;
         last_used_at: string | null;
+        proxy_host: string | null;
+        proxy_port: number | null;
+        proxy_protocol: string | null;
+        proxy_checked_ip: string | null;
+        proxy_country: string | null;
       }>;
 
     return rows.map((row) => ({
@@ -1814,7 +1834,9 @@ function openAll(){
       name: row.name,
       status: row.status as 'open' | 'closed',
       browserType: row.browser_type as 'chromium' | 'firefox',
-      proxyAssigned: row.proxy_id,
+      proxyAssigned: row.proxy_checked_ip
+        ? `${row.proxy_checked_ip}${row.proxy_country ? '\n' + row.proxy_country : ''}`
+        : row.proxy_host ? `${row.proxy_host}:${row.proxy_port}` : null,
       lastUsedAt: row.last_used_at,
     }));
   }

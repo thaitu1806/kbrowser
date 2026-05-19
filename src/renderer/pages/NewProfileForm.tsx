@@ -656,6 +656,8 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
   const handleSave = async () => {
     const api = typeof window !== 'undefined' ? window.electronAPI : null;
     setSaving(true);
+    let checkedIp = '';
+    let checkedCountry = '';
     try {
       // Check proxy before saving if proxy is configured
       if (form.proxyType !== 'none' && form.proxyHost && form.proxyPort && api) {
@@ -677,6 +679,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           scrollToSection('proxy');
           return;
         }
+        // Capture the checked IP and country for saving to proxy record
+        checkedIp = result.ip || '';
+        checkedCountry = result.country || '';
       }
 
       // Resolve screen resolution from form settings
@@ -738,7 +743,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           profileId = editProfileId;
           // Also update proxy if changed
           if (config.proxy && config.proxy.host) {
-            const proxy = await api.addProxy(config.proxy);
+            const proxy = await api.addProxy({ ...config.proxy, checkedIp, country: checkedCountry });
             await api.assignProxy(proxy.id, editProfileId);
           }
         } else {
@@ -746,7 +751,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
           profileId = profile.id;
           // Assign proxy if configured
           if (config.proxy && config.proxy.host) {
-            const proxy = await api.addProxy(config.proxy);
+            const proxy = await api.addProxy({ ...config.proxy, checkedIp, country: checkedCountry });
             await api.assignProxy(proxy.id, profile.id);
           }
         }

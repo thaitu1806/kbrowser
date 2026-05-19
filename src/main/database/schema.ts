@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS proxies (
   password TEXT,
   status TEXT,
   response_time_ms INTEGER,
-  last_checked_at TEXT
+  last_checked_at TEXT,
+  checked_ip TEXT,
+  country TEXT
 );
 
 -- Profiles table: stores browser profile configurations

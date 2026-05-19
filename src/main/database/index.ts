@@ -57,9 +57,18 @@ export function getDatabase(): Database.Database {
  */
 function runMigrations(instance: Database.Database): void {
   // Add deleted_at column for soft delete (trash feature)
-  const columns = instance.pragma('table_info(profiles)') as Array<{ name: string }>;
-  if (!columns.some((c) => c.name === 'deleted_at')) {
+  const profileColumns = instance.pragma('table_info(profiles)') as Array<{ name: string }>;
+  if (!profileColumns.some((c) => c.name === 'deleted_at')) {
     instance.exec('ALTER TABLE profiles ADD COLUMN deleted_at TEXT DEFAULT NULL');
+  }
+
+  // Add checked_ip and country columns to proxies table
+  const proxyColumns = instance.pragma('table_info(proxies)') as Array<{ name: string }>;
+  if (!proxyColumns.some((c) => c.name === 'checked_ip')) {
+    instance.exec('ALTER TABLE proxies ADD COLUMN checked_ip TEXT DEFAULT NULL');
+  }
+  if (!proxyColumns.some((c) => c.name === 'country')) {
+    instance.exec('ALTER TABLE proxies ADD COLUMN country TEXT DEFAULT NULL');
   }
 }
 

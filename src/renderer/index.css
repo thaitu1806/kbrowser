@@ -499,6 +499,12 @@
   font-size: 12px;
 }
 
+.ip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .ip-icon {
   margin-right: 4px;
 }
@@ -507,6 +513,11 @@
   color: var(--text);
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 11px;
+}
+
+.ip-country {
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 .ip-flag {
@@ -1178,7 +1189,6 @@ tr:hover { background: #f8faff; }
   flex: 1;
   overflow: hidden;
   min-height: 0;
-  position: relative;
 }
 
 .npf-content-wrapper > .npf-content {
