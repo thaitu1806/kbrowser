@@ -997,11 +997,14 @@ export class ProfileManager {
       // This is the most reliable way — it controls what screen.width/height/availWidth/availHeight
       // return at the Blink engine level, before any JS runs.
       // This was present in the working version (ee782166) and its removal caused the regression.
+      // Override screen metrics at engine level via CDP
+      // IMPORTANT: Set width/height to 0 to NOT override the viewport (let it match window size)
+      // Only override screenWidth/screenHeight for screen.width/height spoofing
       try {
         await cdp.send('Emulation.setDeviceMetricsOverride', {
-          width: screenW2,
-          height: screenH2,
-          deviceScaleFactor: 1,
+          width: 0,
+          height: 0,
+          deviceScaleFactor: 0,
           mobile: chMobile,
           screenWidth: screenW2,
           screenHeight: screenH2,
