@@ -1317,7 +1317,16 @@ export class ProfileManager {
 <title>🛡️ Ken\\'s Browser IM — Fingerprint Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:20px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:0}
+.ip-banner{background:linear-gradient(135deg,#4a6cf7 0%,#3b5de7 100%);color:#fff;padding:28px 20px;text-align:center;position:relative;overflow:hidden}
+.ip-banner::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
+.ip-banner .ip-icon{font-size:28px;margin-bottom:8px}
+.ip-banner .ip-value{font-size:28px;font-weight:700;font-family:'SF Mono',Consolas,monospace;letter-spacing:0.5px;display:inline-flex;align-items:center;gap:12px}
+.ip-banner .ip-copy{background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:6px 8px;cursor:pointer;font-size:16px;transition:background .15s}
+.ip-banner .ip-copy:hover{background:rgba(255,255,255,0.35)}
+.ip-banner .ip-location{font-size:14px;color:rgba(255,255,255,0.85);margin-top:6px}
+.ip-banner .ip-loading{font-size:16px;color:rgba(255,255,255,0.7)}
+.content{padding:20px}
 .header{text-align:center;padding:16px 0 20px}
 .header h1{font-size:22px;color:#4a6cf7}
 .header p{color:#6b7b8d;font-size:13px;margin-top:4px}
@@ -1337,6 +1346,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </style>
 </head>
 <body>
+
+<div class="ip-banner">
+  <div class="ip-icon">📍</div>
+  <div class="ip-value" id="ip-display"><span class="ip-loading">⏳ Detecting IP...</span></div>
+  <div class="ip-location" id="ip-location"></div>
+</div>
+
+<div class="content">
 <div class="header">
   <h1>🛡️ Ken\\'s Browser IM — Fingerprint Dashboard</h1>
   <p>Click any card to open the checker in a new tab</p>
@@ -1413,8 +1430,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 
 <button class="btn-open-all" onclick="openAll()">🚀 Open All Checks (new tabs)</button>
+</div><!-- end .content -->
 
 <script>
+// Detect real IP via fetch
+(async function() {
+  try {
+    const res = await fetch('http://ip-api.com/json/?fields=query,country,regionName,city,status');
+    const data = await res.json();
+    if (data.status === 'success') {
+      const ip = data.query;
+      const loc = [data.country, data.regionName, data.city].filter(Boolean).join(' / ').toLowerCase();
+      document.getElementById('ip-display').innerHTML = ip + ' <button class="ip-copy" onclick="navigator.clipboard.writeText(\\'' + ip + '\\');this.textContent=\\'✓\\'">📋</button>';
+      document.getElementById('ip-location').textContent = loc;
+    } else {
+      document.getElementById('ip-display').innerHTML = '<span class="ip-loading">Unable to detect IP</span>';
+    }
+  } catch(e) {
+    document.getElementById('ip-display').innerHTML = '<span class="ip-loading">Network error</span>';
+  }
+})();
+
 // Quick info
 const info = document.getElementById('info');
 const items = [
