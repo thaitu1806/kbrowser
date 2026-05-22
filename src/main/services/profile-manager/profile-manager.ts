@@ -224,6 +224,9 @@ export class ProfileManager {
       '--disable-background-networking',
       '--disable-dev-shm-usage',
       '--test-type',
+      // Fix GPU cache "Access is denied" errors
+      '--disable-gpu-shader-disk-cache',
+      '--gpu-cache-size-kb=0',
       // Anti-bot detection
       '--disable-features=AutomationControlled,WebRtcHideLocalIpsWithMdns',
       // Set browser language at Chromium engine level — this controls Accept-Language header
