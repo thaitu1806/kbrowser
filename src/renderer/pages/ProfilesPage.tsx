@@ -36,6 +36,13 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
     name: '', browserType: 'chromium', fingerprint: defaultFingerprint,
   });
 
+  // Inline edit states
+  const [editNameId, setEditNameId] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [editProxyId, setEditProxyId] = useState<string | null>(null);
+  const [editProxyData, setEditProxyData] = useState({ type: 'socks5', host: '', port: '', user: '', pass: '' });
+  const [editProxyChecking, setEditProxyChecking] = useState(false);
+
   // Load profiles from backend
   const loadProfiles = useCallback(async (silent = false) => {
     try {
@@ -106,6 +113,87 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(filteredProfiles.map((p) => p.id)));
+    }
+  };
+
+  // Inline edit: save name
+  const handleSaveName = async () => {
+    if (!editNameId || !editNameValue.trim()) return;
+    try {
+      if (api) {
+        await api.updateProfile(editNameId, { name: editNameValue.trim() });
+        await loadProfiles(true);
+      }
+    } catch { /* ignore */ }
+    setEditNameId(null);
+  };
+
+  // Inline edit: save proxy
+  const handleSaveProxy = async () => {
+    if (!editProxyId) return;
+    try {
+      if (api) {
+        const proxyConfig = editProxyData.host ? {
+          protocol: editProxyData.type as 'http' | 'https' | 'socks5',
+          host: editProxyData.host,
+          port: parseInt(editProxyData.port) || 0,
+          username: editProxyData.user || undefined,
+          password: editProxyData.pass || undefined,
+        } : undefined;
+
+        // Check proxy to get IP
+        let checkedIp = '';
+        let country = '';
+        if (proxyConfig && proxyConfig.host) {
+          setEditProxyChecking(true);
+          try {
+            const result = await api.checkProxyDirect(proxyConfig);
+            if (result.success) {
+              checkedIp = result.ip || '';
+              country = result.country || '';
+            }
+          } catch { /* ignore */ }
+          setEditProxyChecking(false);
+        }
+
+        await api.updateProfile(editProxyId, {
+          proxy: proxyConfig ? { ...proxyConfig, checkedIp, country } as unknown as typeof proxyConfig : undefined,
+        });
+        await loadProfiles(true);
+      }
+    } catch (err) {
+      alert(`Failed to update proxy: ${err instanceof Error ? err.message : 'Error'}`);
+    }
+    setEditProxyId(null);
+  };
+
+  // Open edit name modal
+  const openEditName = (profile: ProfileSummary) => {
+    setEditNameId(profile.id);
+    setEditNameValue(profile.name);
+  };
+
+  // Open edit proxy modal
+  const openEditProxy = async (profileId: string) => {
+    setEditProxyId(profileId);
+    // Load current proxy data
+    try {
+      if (api) {
+        const profile = await api.getProfile(profileId);
+        if (profile?.proxyConfig) {
+          setEditProxyData({
+            type: profile.proxyConfig.protocol || 'socks5',
+            host: profile.proxyConfig.host || '',
+            port: profile.proxyConfig.port ? String(profile.proxyConfig.port) : '',
+            user: profile.proxyConfig.username || '',
+            pass: profile.proxyConfig.password || '',
+          });
+        } else {
+          setEditProxyData({ type: 'socks5', host: '', port: '', user: '', pass: '' });
+        }
+      }
+    } catch {
+      setEditProxyData({ type: 'socks5', host: '', port: '', user: '', pass: '' });
     }
   };
 
@@ -358,6 +446,7 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
                 <td className="col-name">
                   <div className="profile-name-cell">
                     <span className="profile-name-text">{profile.name}</span>
+                    <button className="inline-edit-btn" onClick={() => openEditName(profile)} title="Edit name">✏️</button>
                   </div>
                 </td>
                 <td className="col-ip">
@@ -368,9 +457,13 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
                         {profile.proxyAssigned.includes('\n') && (
                           <span className="ip-country">{profile.proxyAssigned.split('\n')[1]}</span>
                         )}
+                        <button className="inline-edit-btn" onClick={() => openEditProxy(profile.id)} title="Edit proxy">✏️</button>
                       </div>
                     ) : (
-                      <span className="no-proxy">—</span>
+                      <div className="ip-info">
+                        <span className="no-proxy">—</span>
+                        <button className="inline-edit-btn" onClick={() => openEditProxy(profile.id)} title="Edit proxy">✏️</button>
+                      </div>
                     )}
                   </div>
                 </td>
@@ -447,6 +540,77 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
             <div className="form-actions">
               <button className="btn btn-primary" onClick={handleQuickCreate}>Create</button>
               <button className="btn" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Name Modal */}
+      {editNameId && (
+        <div className="modal-overlay" onClick={() => setEditNameId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ minWidth: 440 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>Name</h3>
+              <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7b8d' }} onClick={() => setEditNameId(null)}>✕</button>
+            </div>
+            <div className="form-group">
+              <label>Name</label>
+              <textarea
+                value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value.slice(0, 255))}
+                rows={3}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #e8ecf1', borderRadius: 8, fontSize: 13, resize: 'vertical' }}
+              />
+              <div style={{ textAlign: 'right', fontSize: 11, color: '#a0aec0', marginTop: 4 }}>{editNameValue.length} / 255</div>
+            </div>
+            <div className="form-actions" style={{ marginTop: 16 }}>
+              <button className="btn btn-primary" onClick={handleSaveName}>OK</button>
+              <button className="btn" onClick={() => setEditNameId(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Proxy Modal */}
+      {editProxyId && (
+        <div className="modal-overlay" onClick={() => setEditProxyId(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ minWidth: 480 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>Edit proxy</h3>
+              <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#6b7b8d' }} onClick={() => setEditProxyId(null)}>✕</button>
+            </div>
+            <div className="form-group">
+              <label>Proxy type</label>
+              <select value={editProxyData.type} onChange={(e) => setEditProxyData({ ...editProxyData, type: e.target.value })} style={{ width: '100%', padding: '8px 12px', border: '1px solid #e8ecf1', borderRadius: 8 }}>
+                <option value="http">HTTP</option>
+                <option value="https">HTTPS</option>
+                <option value="socks5">Socks5</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label>Host</label>
+                <input value={editProxyData.host} onChange={(e) => setEditProxyData({ ...editProxyData, host: e.target.value })} placeholder="127.0.0.1" style={{ width: '100%', padding: '8px 12px', border: '1px solid #e8ecf1', borderRadius: 8 }} />
+              </div>
+              <span style={{ padding: '8px 4px', color: '#6b7b8d' }}>:</span>
+              <div style={{ width: 100 }}>
+                <label>Port</label>
+                <input value={editProxyData.port} onChange={(e) => setEditProxyData({ ...editProxyData, port: e.target.value })} placeholder="1080" style={{ width: '100%', padding: '8px 12px', border: '1px solid #e8ecf1', borderRadius: 8 }} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Username (Optional)</label>
+              <input value={editProxyData.user} onChange={(e) => setEditProxyData({ ...editProxyData, user: e.target.value })} placeholder="Optional" style={{ width: '100%', padding: '8px 12px', border: '1px solid #e8ecf1', borderRadius: 8 }} />
+            </div>
+            <div className="form-group">
+              <label>Password (Optional)</label>
+              <input type="password" value={editProxyData.pass} onChange={(e) => setEditProxyData({ ...editProxyData, pass: e.target.value })} placeholder="Optional" style={{ width: '100%', padding: '8px 12px', border: '1px solid #e8ecf1', borderRadius: 8 }} />
+            </div>
+            <div className="form-actions" style={{ marginTop: 16 }}>
+              <button className="btn btn-primary" onClick={handleSaveProxy} disabled={editProxyChecking}>
+                {editProxyChecking ? '⏳ Checking...' : 'OK'}
+              </button>
+              <button className="btn" onClick={() => setEditProxyId(null)}>Cancel</button>
             </div>
           </div>
         </div>

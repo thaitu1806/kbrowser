@@ -843,9 +843,9 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
                 value={form.name}
                 onChange={(e) => update('name', e.target.value)}
                 placeholder="Optional: profile name"
-                maxLength={100}
+                maxLength={255}
               />
-              <span className="char-count">{form.name.length} / 100</span>
+              <span className="char-count">{form.name.length} / 255</span>
             </FormRow>
 
             <FormRow label="Browser">
