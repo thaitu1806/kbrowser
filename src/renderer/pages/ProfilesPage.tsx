@@ -202,34 +202,34 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
       setOpeningId(id);
       setOpenStatus('Checking proxy...');
       if (api) {
-        // Check proxy before opening and get IP
-        const validation = await api.validateProxy(id);
-        if (validation.status === 'dead') {
-          const proceed = confirm(
-            `⚠️ Proxy is not responding!\n\n${validation.message}\n\nOpen without proxy?`
-          );
-          if (!proceed) {
-            setOpeningId(null);
-            setOpenStatus(null);
-            return;
-          }
-        }
+        // Get profile to check proxy
+        const profile = await api.getProfile(id);
+        const proxyConfig = profile?.proxyConfig;
 
-        // If proxy is alive, do a full check to get IP and update database
-        if (validation.status === 'ready' && validation.proxy) {
-          try {
-            const checkResult = await api.checkProxyDirect({
-              protocol: validation.proxy.protocol,
-              host: validation.proxy.host,
-              port: validation.proxy.port,
-              username: validation.proxy.username,
-              password: validation.proxy.password,
-            });
-            if (checkResult.success && checkResult.ip) {
-              const fullLocation = [checkResult.country, checkResult.region, checkResult.city].filter(Boolean).join(' - ');
-              await api.updateCheckedIp(id, checkResult.ip, fullLocation);
+        if (proxyConfig && proxyConfig.host) {
+          // Single check: validates proxy AND gets IP/location in one call
+          const checkResult = await api.checkProxyDirect({
+            protocol: proxyConfig.protocol,
+            host: proxyConfig.host,
+            port: proxyConfig.port,
+            username: proxyConfig.username,
+            password: proxyConfig.password,
+          });
+
+          if (!checkResult.success) {
+            const proceed = confirm(
+              `⚠️ Proxy is not responding!\n\n${proxyConfig.host}:${proxyConfig.port} — ${checkResult.error || 'Connection failed'}\n\nOpen without proxy?`
+            );
+            if (!proceed) {
+              setOpeningId(null);
+              setOpenStatus(null);
+              return;
             }
-          } catch { /* ignore IP check errors */ }
+          } else if (checkResult.ip) {
+            // Update IP + full location in database
+            const fullLocation = [checkResult.country, checkResult.region, checkResult.city].filter(Boolean).join(' - ');
+            await api.updateCheckedIp(id, checkResult.ip, fullLocation);
+          }
         }
 
         setOpenStatus('Starting browser...');
