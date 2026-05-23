@@ -1065,7 +1065,7 @@ export class ProfileManager {
     try {
       const firstPage = context.pages()[0];
       if (firstPage) {
-        await firstPage.setContent(this.getFingerprintDashboardHTML(), { waitUntil: 'domcontentloaded' });
+        await firstPage.setContent(this.getFingerprintDashboardHTML(ramGB), { waitUntil: 'domcontentloaded' });
       }
     } catch {
       // Ignore errors
@@ -1315,7 +1315,7 @@ export class ProfileManager {
    * Returns inline HTML for the fingerprint verification dashboard.
    * Opens external checker sites in new tabs via JavaScript.
    */
-  private getFingerprintDashboardHTML(): string {
+  private getFingerprintDashboardHTML(ramGB: number = 8): string {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1471,7 +1471,7 @@ const items = [
   ['Language', navigator.language],
   ['Screen', screen.width+'x'+screen.height],
   ['CPU Cores', navigator.hardwareConcurrency||'?'],
-  ['RAM', (navigator.deviceMemory||'?')+' GB'],
+  ['RAM', (navigator.deviceMemory||${ramGB})+' GB'],
   ['Timezone', Intl.DateTimeFormat().resolvedOptions().timeZone],
   ['DNT', navigator.doNotTrack||'unset'],
 ];

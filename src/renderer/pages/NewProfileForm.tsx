@@ -681,7 +681,7 @@ export default function NewProfileForm({ editProfileId, onSave, onCancel }: NewP
         }
         // Capture the checked IP and country for saving to proxy record
         checkedIp = result.ip || '';
-        checkedCountry = result.country || '';
+        checkedCountry = [result.country, result.region, result.city].filter(Boolean).join(' - ');
       }
 
       // Resolve screen resolution from form settings

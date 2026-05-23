@@ -414,30 +414,30 @@ export function setupIPC(): { profileManager: ProfileManager } {
     const checker = (ipChecker || 'ip-api.com').toLowerCase();
     let checkerHost: string;
     let checkerPath: string;
-    let parseResponse: (data: string) => { ip?: string; country?: string; region?: string; city?: string };
+    let parseResponse: (data: string) => { ip?: string; country?: string; region?: string; city?: string; isp?: string };
 
     if (checker.includes('ipinfo')) {
       checkerHost = 'ipinfo.io';
       checkerPath = '/json';
       parseResponse = (data: string) => {
         const json = JSON.parse(data);
-        return { ip: json.ip, country: json.country, region: json.region, city: json.city };
+        return { ip: json.ip, country: json.country, region: json.region, city: json.city, isp: json.org };
       };
     } else if (checker.includes('ip2location')) {
       checkerHost = 'api.ip2location.io';
       checkerPath = '/';
       parseResponse = (data: string) => {
         const json = JSON.parse(data);
-        return { ip: json.ip, country: json.country_name || json.country_code, region: json.region_name, city: json.city_name };
+        return { ip: json.ip, country: json.country_name || json.country_code, region: json.region_name, city: json.city_name, isp: json.isp };
       };
     } else {
       // Default: ip-api.com
       checkerHost = 'ip-api.com';
-      checkerPath = '/json/?fields=query,country,regionName,city,status';
+      checkerPath = '/json/?fields=query,country,regionName,city,isp,status';
       parseResponse = (data: string) => {
         const json = JSON.parse(data);
         if (json.status === 'success') {
-          return { ip: json.query, country: json.country, region: json.regionName, city: json.city };
+          return { ip: json.query, country: json.country, region: json.regionName, city: json.city, isp: json.isp };
         }
         return { ip: json.query || 'Unknown' };
       };
@@ -451,6 +451,7 @@ export function setupIPC(): { profileManager: ProfileManager } {
       country?: string;
       region?: string;
       city?: string;
+      isp?: string;
       responseTimeMs: number;
       error?: string;
     };

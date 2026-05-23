@@ -150,7 +150,7 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
             const result = await api.checkProxyDirect(proxyConfig);
             if (result.success) {
               checkedIp = result.ip || '';
-              country = result.country || '';
+              country = [result.country, result.region, result.city].filter(Boolean).join(' - ');
             }
           } catch { /* ignore */ }
           setEditProxyChecking(false);
@@ -226,7 +226,8 @@ export default function ProfilesPage({ onNewProfile, onEditProfile, initialGroup
               password: validation.proxy.password,
             });
             if (checkResult.success && checkResult.ip) {
-              await api.updateCheckedIp(id, checkResult.ip, checkResult.country || '');
+              const fullLocation = [checkResult.country, checkResult.region, checkResult.city].filter(Boolean).join(' - ');
+              await api.updateCheckedIp(id, checkResult.ip, fullLocation);
             }
           } catch { /* ignore IP check errors */ }
         }
