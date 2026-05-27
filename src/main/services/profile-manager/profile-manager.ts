@@ -1065,7 +1065,7 @@ export class ProfileManager {
     try {
       const firstPage = context.pages()[0];
       if (firstPage) {
-        await firstPage.setContent(this.getFingerprintDashboardHTML(ramGB), { waitUntil: 'domcontentloaded' });
+        await firstPage.setContent(this.getFingerprintDashboardHTML(ramGB, row.name), { waitUntil: 'domcontentloaded' });
       }
     } catch {
       // Ignore errors
@@ -1315,12 +1315,13 @@ export class ProfileManager {
    * Returns inline HTML for the fingerprint verification dashboard.
    * Opens external checker sites in new tabs via JavaScript.
    */
-  private getFingerprintDashboardHTML(ramGB: number = 8): string {
+  private getFingerprintDashboardHTML(ramGB: number = 8, profileName: string = ''): string {
+    const tabTitle = profileName || "Ken's Browser IM";
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>🛡️ Ken\\'s Browser IM — Fingerprint Dashboard</title>
+<title>${tabTitle}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1e2a3a;padding:0}
